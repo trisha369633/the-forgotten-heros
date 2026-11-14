@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Mic, MicOff, Move } from 'lucide-react'
+import { Mic, Move } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import gsap from 'gsap'
 import VideoPlayer from './VideoPlayer.jsx'
+import ThinkingOrb from './ThinkingOrb.jsx'
 import { chapters } from '../data/chapters.js'
 import './StoryBook.css'
 
@@ -266,14 +267,14 @@ function ChapterNarration({ chapter }) {
         />
       )}
       <button
-        className="speech-toggle"
+        className={`speech-toggle${playbackMode ? ' playing' : ''}`}
         type="button"
         aria-pressed={Boolean(playbackMode)}
         onClick={togglePlayback}
       >
         {playbackMode ? (
           <>
-            <MicOff size={15} strokeWidth={2} aria-hidden="true" />
+            <ThinkingOrb state="listening" size={20} theme="dark" ariaLabel="Narration playing" />
             <span>Pause narration</span>
           </>
         ) : (
