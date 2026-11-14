@@ -113,25 +113,47 @@ const storyDetails = [
       url: 'https://spaceplace.nasa.gov/',
     },
   },
+  {
+    title: 'Cosmic Quest',
+    paragraphs: [
+      'The journey through space leaves infinite puzzles to solve. Across distant craters and silent valleys, the footprints of humanity’s robotic pioneers invite curious minds to decode their cosmic paths.',
+    ],
+    nasaData: {
+      fact: 'NASA Citizen Science projects let anyone explore real space discoveries and contribute to scientific research.',
+      url: 'https://science.nasa.gov/citizen-science/',
+    },
+  },
+  {
+    title: 'The Hall of Heroes',
+    paragraphs: [
+      'As Akaay looked at his toy rocket on the nightstand, he realized the universe wasn’t as lonely as it seemed. Spirit, Opportunity, Hubble, Voyager, Viking, Pioneer, and Apollo—they were all still out there.',
+      'Though silent, they remain humanity’s greatest monuments. Across billions of kilometers of void, their legacy continues to guide our journey back to the stars.',
+    ],
+    nasaData: {
+      fact: 'NASA Open Data has over 40,000 datasets and mission archives freely available to explore and build upon.',
+      url: 'https://data.nasa.gov/',
+    },
+  },
 ]
 
-export const chapters = Array.from({ length: 10 }, (_, index) => {
+export const chapters = Array.from({ length: 11 }, (_, index) => {
   const number = index + 1
   const id = String(number).padStart(2, '0')
+  const isBackPage = number === 11
   const isPuzzleChapter = number === 10
   const details = storyDetails[index]
 
   return {
     id,
     number,
-    title: details?.title || (isPuzzleChapter ? 'Puzzle Chapter' : null),
-    kind: isPuzzleChapter ? 'puzzle' : 'story',
-    Content: isPuzzleChapter ? Chapter10 : storyChapters[index],
+    title: details?.title || (isPuzzleChapter ? 'Puzzle Chapter' : isBackPage ? 'Epilogue & Back Cover' : null),
+    kind: isPuzzleChapter ? 'puzzle' : isBackPage ? 'back' : 'story',
+    Content: isPuzzleChapter ? Chapter10 : (storyChapters[index] || Chapter10),
     ...(details || {}),
     audio: `/media/chapter-${id}/audio/narration.mp3`,
     media: {
       type: 'image',
-      src: `/media/chapter-${id}/images/chapter-${id}.jpg`,
+      src: `/media/chapter-${id}/images/chapter${number}.jpeg`,
       video: `/media/chapter-${id}/videos/chapter-${id}.mp4`,
     },
   }
