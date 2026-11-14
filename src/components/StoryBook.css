@@ -991,30 +991,6 @@
   color: #c9bda4;
 }
 
-.cover-cta {
-  margin-top: auto;
-  font-family: 'Avenir Next', Avenir, 'Segoe UI', sans-serif;
-  font-size: clamp(9px, 1.15cqw, 13px);
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #f3ece0;
-  padding: 0.6cqw 1.4cqw;
-  border: 1px solid rgba(243, 236, 224, 0.25);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(4px);
-  transition: all 200ms ease;
-}
-
-.cover:hover .cover-cta {
-  border-color: #fc3d21;
-  background: rgba(252, 61, 33, 0.2);
-  color: #ffffff;
-  box-shadow: 0 0 16px rgba(252, 61, 33, 0.4);
-  transform: translateY(-2px);
-}
-
 /* Back Cover & Epilogue */
 .epilogue-page {
   background-color: #f6efe3;
@@ -1176,17 +1152,20 @@
 }
 
 .back-cover-synopsis {
+  max-width: 34em;
+  align-self: center;
   color: #d8cebc;
   font-family: 'Charter', 'Baskerville', Georgia, serif;
   font-size: clamp(11px, 1.4cqw, 16px);
   line-height: 1.6;
   margin: 0 0 1.2cqw;
-  text-align: justify;
+  text-align: center;
 }
 
 .back-cover-missions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 0.45cqw;
   margin-bottom: auto;
 }
@@ -1203,51 +1182,9 @@
   border-radius: 4px;
 }
 
-.back-cover-actions {
-  display: flex;
-  gap: 0.8cqw;
-  margin: 1.4cqw 0;
-}
-
-.back-cover-btn {
-  padding: 0.6cqw 1.3cqw;
-  font-family: 'Avenir Next', Avenir, 'Segoe UI', sans-serif;
-  font-size: clamp(10px, 1.2cqw, 14px);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: all 180ms ease;
-}
-
-.back-cover-btn.primary {
-  color: #ffffff;
-  background: #fc3d21;
-  border: 1px solid #fc3d21;
-  box-shadow: 0 4px 14px rgba(252, 61, 33, 0.35);
-}
-
-.back-cover-btn.primary:hover {
-  background: #e03218;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgba(252, 61, 33, 0.5);
-}
-
-.back-cover-btn.secondary {
-  color: #f3ece0;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.back-cover-btn.secondary:hover {
-  background: rgba(255, 255, 255, 0.16);
-  border-color: rgba(255, 255, 255, 0.4);
-  transform: translateY(-2px);
-}
-
 .back-cover-footer {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: flex-end;
   padding-top: 1cqw;
   border-top: 1px solid rgba(255, 255, 255, 0.12);
@@ -1266,82 +1203,12 @@
   font-size: clamp(8px, 0.9cqw, 11px);
 }
 
-.back-cover-barcode {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.2cqw;
-  padding: 0.3cqw 0.6cqw;
-  background: #ffffff;
-  border-radius: 2px;
-}
-
-.barcode-bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 1.5px;
-  height: 18px;
-}
-
-.barcode-bars span {
-  display: block;
-  width: 1.5px;
-  height: 100%;
-  background: #111111;
-}
-
-.barcode-bars span:nth-child(2n) {
-  width: 2.5px;
-}
-
-.barcode-bars span:nth-child(3n) {
-  width: 1px;
-}
-
-.barcode-bars span:nth-child(5n) {
-  width: 3px;
-}
-
-.isbn-label {
-  font-family: 'Courier New', monospace;
-  font-size: 7px;
-  color: #111111;
-  letter-spacing: 0.06em;
-  font-weight: 700;
-}
-
-.back-cover-cta {
-  margin-top: auto;
-  font-family: 'Avenir Next', Avenir, 'Segoe UI', sans-serif;
-  font-size: clamp(9px, 1.15cqw, 13px);
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #f3ece0;
-  padding: 0.6cqw 1.4cqw;
-  border: 1px solid rgba(243, 236, 224, 0.25);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(4px);
-  align-self: center;
-  transition: all 200ms ease;
-}
-
-.back-cover:hover .back-cover-cta {
-  border-color: #fc3d21;
-  background: rgba(252, 61, 33, 0.2);
-  color: #ffffff;
-  box-shadow: 0 0 16px rgba(252, 61, 33, 0.4);
-  transform: translateY(-2px);
-}
-
 /* Accessible focus outlines */
 .book-arrow:focus-visible,
 .contents-entry:focus-visible,
 .speech-toggle:focus-visible,
 .data-card:focus-visible,
-.cover:focus-visible,
-.back-cover-btn:focus-visible {
+.cover:focus-visible {
   outline: 2px solid #fc3d21;
   outline-offset: 3px;
 }

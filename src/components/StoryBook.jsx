@@ -386,7 +386,7 @@ function BlankEndpaperPage() {
   )
 }
 
-function BackCover({ onRestart, onContents, onReopen }) {
+function BackCover({ onReopen }) {
   return (
     <div
       className="back-cover"
@@ -409,9 +409,9 @@ function BackCover({ onRestart, onContents, onReopen }) {
         <div className="back-cover-rule" aria-hidden="true" />
 
         <p className="back-cover-synopsis">
-          Far beyond the warm glow of Earth, silent sentinels wander through dark celestial seas.
-          From the dusty crimson plains of Mars to the interstellar void beyond our solar system,
-          this story honors the pioneers that never came home—our forgotten heroes.
+          Join Akaay and his guide Atlas on an unforgettable journey through the wonders of space.
+          Meet the rovers, telescopes, and spacecraft that ventured beyond Earth, and discover how
+          their brave missions continue to inspire humanity's quest among the stars.
         </p>
 
         <div className="back-cover-missions">
@@ -423,45 +423,12 @@ function BackCover({ onRestart, onContents, onReopen }) {
           <span className="mission-tag">Apollo 11</span>
         </div>
 
-        <div className="back-cover-actions">
-          <button
-            type="button"
-            className="back-cover-btn primary"
-            onClick={(e) => {
-              e.stopPropagation()
-              onRestart?.()
-            }}
-          >
-            ↺ Read from Beginning
-          </button>
-          <button
-            type="button"
-            className="back-cover-btn secondary"
-            onClick={(e) => {
-              e.stopPropagation()
-              onContents?.()
-            }}
-          >
-            Table of Contents
-          </button>
-        </div>
-
         <div className="back-cover-footer">
           <div className="back-cover-citation">
             <strong>NASA Open Data</strong>
             <small>Inspired by real exploration archives</small>
           </div>
-          <div className="back-cover-barcode" aria-hidden="true">
-            <div className="barcode-bars">
-              <span /><span /><span /><span /><span /><span /><span /><span />
-              <span /><span /><span /><span /><span /><span /><span /><span />
-              <span /><span /><span /><span /><span /><span /><span /><span />
-            </div>
-            <span className="isbn-label">ISBN 978-0-NASA-HEROES</span>
-          </div>
         </div>
-
-        <span className="back-cover-cta">Click or press to open</span>
       </div>
     </div>
   )
@@ -1030,7 +997,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
   const handleSpreadClick = (e) => {
     if (isFlippingRef.current) return
     // Don't turn if user clicked an interactive control
-    if (e.target.closest('button, a, audio, video, input, select, textarea, .data-card, .speech-toggle, .back-cover-btn')) {
+    if (e.target.closest('button, a, audio, video, input, select, textarea, .data-card, .speech-toggle')) {
       return
     }
 
@@ -1181,8 +1148,6 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
             <div className="leaf-face leaf-face-back">
               {flipState.direction === 'close-back' || flipState.direction === 'open-back' ? (
                 <BackCover
-                  onRestart={() => openFromBackCover(1)}
-                  onContents={() => openFromBackCover(0)}
                   onReopen={() => openFromBackCover(11)}
                 />
               ) : flipState.direction === 'next' ? (
@@ -1204,7 +1169,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
         )}
 
         {/* Front Cover */}
-        {!isBackCover && (
+        {!isBackCover && (!isOpen || spread === 0) && (
           <div
             ref={coverRef}
             className="cover"
@@ -1224,9 +1189,6 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
               <h1>The Forgotten Heroes</h1>
               <CoverIllustration />
               <p className="cover-subtitle">Inspired by NASA's open space data</p>
-              {!isOpen && (
-                <span className="cover-cta">Click or press → to open</span>
-              )}
             </div>
           </div>
         )}
@@ -1236,8 +1198,6 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
           <>
             <div className="page-stack-back" aria-hidden="true" />
             <BackCover
-              onRestart={() => openFromBackCover(1)}
-              onContents={() => openFromBackCover(0)}
               onReopen={() => openFromBackCover(11)}
             />
           </>
