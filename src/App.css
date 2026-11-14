@@ -1,0 +1,31 @@
+.story-world {
+  position: relative;
+  isolation: isolate;
+  min-height: 100svh;
+  overflow: hidden;
+  background-color: #080b12;
+}
+
+.story-world::before,
+.story-world::after {
+  position: fixed;
+  pointer-events: none;
+  content: '';
+}
+
+.story-world::before {
+  inset: 0;
+  z-index: -2;
+  background-image: url('/backgrounds/space-background.jpg');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.story-world::after {
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(rgba(5, 8, 15, 0.28), rgba(5, 8, 15, 0.34)),
+    radial-gradient(ellipse at center, transparent 42%, rgba(0, 0, 0, 0.2) 100%);
+}
