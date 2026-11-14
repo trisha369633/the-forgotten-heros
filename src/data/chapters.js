@@ -153,7 +153,7 @@ export const chapters = Array.from({ length: 11 }, (_, index) => {
     audio: `/media/chapter-${id}/audio/narration.mp3`,
     media: {
       type: 'image',
-      src: `/media/chapter-${id}/images/chapter${number}.jpeg`,
+      src: `/media/chapter-${id}/images/chapter-${id}.jpeg`,
       video: `/media/chapter-${id}/videos/chapter-${id}.mp4`,
     },
   }

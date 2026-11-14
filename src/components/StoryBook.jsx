@@ -79,37 +79,9 @@ function BackgroundMusic() {
   )
 }
 
-const resolvedImageCache = new Map()
-
 function ChapterMedia({ chapter }) {
   const isVideo = chapter.media.type === 'video'
-
-  const candidates = [
-    `/media/chapter-${chapter.id}/images/chapter${chapter.number}.jpeg`,
-    `/media/chapter-${chapter.id}/images/chapter-${chapter.id}.jpeg`,
-    `/media/chapter-${chapter.id}/images/chapter-${chapter.id}.jpg`,
-    `/media/chapter-01/images/chapter${chapter.number}.jpeg`,
-    chapter.media.src,
-  ]
-
-  const cachedSrc = resolvedImageCache.get(chapter.id)
-  const [currentSrc, setCurrentSrc] = useState(cachedSrc || candidates[0])
-  const [candidateIndex, setCandidateIndex] = useState(0)
   const [imageUnavailable, setImageUnavailable] = useState(false)
-
-  const handleImageLoad = (e) => {
-    resolvedImageCache.set(chapter.id, e.currentTarget.src)
-  }
-
-  const handleImageError = () => {
-    const nextIdx = candidateIndex + 1
-    if (nextIdx < candidates.length) {
-      setCandidateIndex(nextIdx)
-      setCurrentSrc(candidates[nextIdx])
-    } else {
-      setImageUnavailable(true)
-    }
-  }
 
   return (
     <>
@@ -128,12 +100,11 @@ function ChapterMedia({ chapter }) {
         ) : (
           <img
             className="chapter-image"
-            src={currentSrc}
-            alt={`Illustration for chapter ${chapter.number}`}
+            src={chapter.media.src}
+            alt={`Illustration for ${chapter.title || `chapter ${chapter.number}`}`}
             loading="eager"
             decoding="async"
-            onLoad={handleImageLoad}
-            onError={handleImageError}
+            onError={() => setImageUnavailable(true)}
           />
         )}
         <span className="media-caption">
@@ -267,15 +238,16 @@ function ChapterNarration({ chapter }) {
         />
       )}
       <button
-        className={`speech-toggle${playbackMode ? ' playing' : ''}`}
+        className={`speech-toggle${playbackMode ? ' playing floating' : ''}`}
         type="button"
         aria-pressed={Boolean(playbackMode)}
         onClick={togglePlayback}
+        title={playbackMode ? 'Click to pause narration' : 'Listen to story'}
       >
         {playbackMode ? (
           <>
-            <ThinkingOrb state="listening" size={20} theme="dark" ariaLabel="Narration playing" />
-            <span>Pause narration</span>
+            <ThinkingOrb state="listening" size={28} theme="light" ariaLabel="Narration playing" />
+            <span className="narration-floating-text">Pause narration</span>
           </>
         ) : (
           <>
@@ -1169,7 +1141,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
         )}
 
         {/* Front Cover */}
-        {!isBackCover && (!isOpen || spread === 0) && (
+        {!isBackCover && !isOpen && (
           <div
             ref={coverRef}
             className="cover"
