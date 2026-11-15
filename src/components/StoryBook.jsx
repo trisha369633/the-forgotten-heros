@@ -12,6 +12,7 @@ const QUIZ_QUESTIONS_PER_PAGE = 3
 const QUIZ_PAGES = 2
 const BACKGROUND_MUSIC_VOLUME = 0.3
 const DUCKED_BACKGROUND_MUSIC_VOLUME = 0.2
+const SOUND_PREFERENCE_KEY = 'fh-sound'
 const mediaAvailabilityCache = new Map()
 const narrationStopHandlers = new Set()
 const activeNarrations = new Set()
@@ -43,6 +44,14 @@ function stopActiveNarrations() {
   narrationStopHandlers.forEach((stop) => stop())
 }
 
+function getSavedSoundPreference() {
+  try {
+    return window.localStorage.getItem(SOUND_PREFERENCE_KEY) !== 'off'
+  } catch {
+    return true
+  }
+}
+
 const displayedQuizQuestions = questions.slice(0, QUIZ_QUESTIONS_PER_PAGE * QUIZ_PAGES)
 const quizPages = Array.from({ length: QUIZ_PAGES }, (_, pageIndex) => {
   const questionStart = pageIndex * QUIZ_QUESTIONS_PER_PAGE
@@ -71,119 +80,159 @@ const firstSpreadForChapter = (chapterNumber) => chapterFirstSpreads.get(chapter
 const chapterNumberForSpread = (spreadIndex) => bookSpreads[spreadIndex]?.chapter?.number ?? 1
 
 function BackgroundMusic({ isModalOpen }) {
-  const [enabled, setEnabled] = useState(false)
+  const [enabled, setEnabled] = useState(getSavedSoundPreference)
   const [message, setMessage] = useState('')
-  const modalWasOpenRef = useRef(false)
-  const wasPlayingBeforeModalRef = useRef(false)
+  const audioRef = useRef(null)
+  const enabledRef = useRef(enabled)
   const playbackAttemptRef = useRef(0)
+  const pendingGestureCleanupRef = useRef(null)
+  const pauseReasonsRef = useRef(new Set())
+  const resumeAfterPauseRef = useRef(false)
+  const attemptPlaybackRef = useRef(null)
 
-  useEffect(() => {
-    const audio = document.getElementById('background-music')
-    if (!audio) return
+  function removePendingGestureListeners() {
+    pendingGestureCleanupRef.current?.()
+    pendingGestureCleanupRef.current = null
+  }
+
+  const attemptPlayback = useCallback(() => {
+    const audio = audioRef.current
+    if (
+      !audio
+      || !enabledRef.current
+      || pauseReasonsRef.current.size
+      || document.hidden
+    ) return
 
     const attempt = ++playbackAttemptRef.current
     updateBackgroundMusicVolume()
     audio.play()
       .then(() => {
-        if (attempt !== playbackAttemptRef.current) return
-        setEnabled(true)
-        setMessage('')
+        if (attempt === playbackAttemptRef.current) setMessage('')
       })
       .catch((error) => {
-        if (attempt !== playbackAttemptRef.current) return
-        setEnabled(false)
-        setMessage(
-          error?.name === 'NotAllowedError'
-            ? 'Autoplay was blocked. Click to start background sound.'
-            : 'Background sound could not be played.',
-        )
-      })
+        if (attempt !== playbackAttemptRef.current || !enabledRef.current) return
+        if (error?.name === 'NotAllowedError') {
+          if (pendingGestureCleanupRef.current) return
 
-    return () => {
+          const handleGesture = () => {
+            removePendingGestureListeners()
+            attemptPlaybackRef.current?.()
+          }
+          const options = { once: true, capture: true }
+          window.addEventListener('pointerdown', handleGesture, options)
+          window.addEventListener('keydown', handleGesture, options)
+          window.addEventListener('touchstart', handleGesture, options)
+          pendingGestureCleanupRef.current = () => {
+            window.removeEventListener('pointerdown', handleGesture, true)
+            window.removeEventListener('keydown', handleGesture, true)
+            window.removeEventListener('touchstart', handleGesture, true)
+          }
+          return
+        }
+        setMessage('Background sound could not be played.')
+      })
+  }, [])
+
+  const setPauseReason = useCallback((reason, isPaused) => {
+    const audio = audioRef.current
+    const pauseReasons = pauseReasonsRef.current
+
+    if (isPaused) {
+      if (pauseReasons.has(reason)) return
+      if (pauseReasons.size === 0) {
+        resumeAfterPauseRef.current = Boolean(audio && !audio.paused)
+      }
+      pauseReasons.add(reason)
       playbackAttemptRef.current += 1
-      audio.pause()
+      audio?.pause()
+      return
+    }
+
+    if (!pauseReasons.delete(reason) || pauseReasons.size > 0) return
+    const shouldResume = resumeAfterPauseRef.current
+    resumeAfterPauseRef.current = false
+    if (shouldResume && enabledRef.current && !document.hidden) {
+      attemptPlaybackRef.current?.()
     }
   }, [])
 
   useEffect(() => {
     const audio = document.getElementById('background-music')
+    if (!(audio instanceof HTMLAudioElement)) return
 
-    if (isModalOpen && !modalWasOpenRef.current) {
-      modalWasOpenRef.current = true
-      wasPlayingBeforeModalRef.current = enabled
-      playbackAttemptRef.current += 1
-      if (enabled && audio) {
-        audio.pause()
+    attemptPlaybackRef.current = attemptPlayback
+
+    function handleVisibilityChange() {
+      setPauseReason('hidden', document.hidden)
+    }
+
+    function handleVideoPlay(event) {
+      if (event.target instanceof HTMLVideoElement) {
+        setPauseReason(event.target, true)
       }
-      return
     }
 
-    if (!isModalOpen && modalWasOpenRef.current) {
-      modalWasOpenRef.current = false
-      if (!wasPlayingBeforeModalRef.current) return
-
-      wasPlayingBeforeModalRef.current = false
-      if (!audio) return
-
-      const attempt = ++playbackAttemptRef.current
-      updateBackgroundMusicVolume()
-      audio.play()
-        .then(() => {
-          if (attempt !== playbackAttemptRef.current) return
-          setEnabled(true)
-          setMessage('')
-        })
-        .catch((error) => {
-          if (attempt !== playbackAttemptRef.current) return
-          setEnabled(false)
-          setMessage(
-            error?.name === 'NotAllowedError'
-              ? 'Click to resume background sound.'
-              : 'Background sound could not be played.',
-          )
-        })
+    function handleVideoStop(event) {
+      if (event.target instanceof HTMLVideoElement) {
+        setPauseReason(event.target, false)
+      }
     }
-  }, [enabled, isModalOpen])
 
-  async function toggleMusic() {
-    const audio = document.getElementById('background-music')
-    if (!audio) return
+    updateBackgroundMusicVolume()
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    document.addEventListener('play', handleVideoPlay, true)
+    document.addEventListener('pause', handleVideoStop, true)
+    document.addEventListener('ended', handleVideoStop, true)
+    handleVisibilityChange()
+    if (enabledRef.current) attemptPlayback()
 
-    if (enabled) {
+    return () => {
       playbackAttemptRef.current += 1
+      removePendingGestureListeners()
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      document.removeEventListener('play', handleVideoPlay, true)
+      document.removeEventListener('pause', handleVideoStop, true)
+      document.removeEventListener('ended', handleVideoStop, true)
       audio.pause()
-      setEnabled(false)
-      setMessage('')
+    }
+  }, [attemptPlayback, setPauseReason])
+
+  useEffect(() => {
+    setPauseReason('modal', isModalOpen)
+  }, [isModalOpen, setPauseReason])
+
+  function toggleMusic() {
+    const nextEnabled = !enabledRef.current
+    enabledRef.current = nextEnabled
+    setEnabled(nextEnabled)
+    setMessage('')
+    try {
+      window.localStorage.setItem(SOUND_PREFERENCE_KEY, nextEnabled ? 'on' : 'off')
+    } catch {
+      // The sound preference remains available for this page load.
+    }
+
+    if (!nextEnabled) {
+      playbackAttemptRef.current += 1
+      removePendingGestureListeners()
+      resumeAfterPauseRef.current = false
+      audioRef.current?.pause()
       return
     }
 
-    const attempt = ++playbackAttemptRef.current
-    try {
-      updateBackgroundMusicVolume()
-      await audio.play()
-      if (attempt !== playbackAttemptRef.current) return
-      setEnabled(true)
-      setMessage('')
-    } catch (error) {
-      if (attempt !== playbackAttemptRef.current) return
-      setEnabled(false)
-      setMessage(
-        error?.name === 'NotAllowedError'
-          ? 'Click to allow background sound.'
-          : 'Background sound could not be played.',
-      )
-    }
+    attemptPlayback()
   }
 
   return (
     <div className="sound-control">
       <audio
+        ref={audioRef}
         id="background-music"
         src="/backgrounds/backgroundsound.wav"
         loop
         preload="none"
         onError={() => {
-          setEnabled(false)
           setMessage('Background sound could not be loaded.')
         }}
       />
