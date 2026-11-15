@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Mic, Move } from 'lucide-react'
+import { Mic, Move, Play } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import gsap from 'gsap'
 import VideoPlayer from './VideoPlayer.jsx'
@@ -151,6 +151,7 @@ function ChapterNarration({ chapter }) {
   const audioRef = useRef(null)
   const utteranceRef = useRef(null)
   const [playbackMode, setPlaybackMode] = useState(null)
+  const [isPaused, setIsPaused] = useState(false)
   const [speechError, setSpeechError] = useState('')
   const [audioAvailable, setAudioAvailable] = useState(Boolean(chapter.audio))
 
@@ -171,16 +172,20 @@ function ChapterNarration({ chapter }) {
     utterance.onend = () => {
       utteranceRef.current = null
       setPlaybackMode(null)
+      setIsPaused(false)
     }
-    utterance.onerror = () => {
+    utterance.onerror = (event) => {
       utteranceRef.current = null
+      if (event.error === 'canceled' || event.error === 'interrupted') return
       setSpeechError('Speech narration could not be played.')
       setPlaybackMode(null)
+      setIsPaused(false)
     }
     window.speechSynthesis.cancel()
     utteranceRef.current = utterance
     window.speechSynthesis.speak(utterance)
     setPlaybackMode('speech')
+    setIsPaused(false)
   }
 
   const stopAll = useCallback(() => {
@@ -192,6 +197,7 @@ function ChapterNarration({ chapter }) {
     }
     utteranceRef.current = null
     setPlaybackMode(null)
+    setIsPaused(false)
   }, [speechIsAvailable])
 
   useEffect(() => {
@@ -203,11 +209,33 @@ function ChapterNarration({ chapter }) {
   async function togglePlayback(e) {
     e.stopPropagation()
     if (playbackMode) {
-      stopAll()
+      if (isPaused) {
+        if (playbackMode === 'audio' && audioRef.current) {
+          try {
+            await audioRef.current.play()
+          } catch {
+            setSpeechError('Narration could not be resumed.')
+            setPlaybackMode(null)
+            setIsPaused(false)
+            return
+          }
+        } else if (speechIsAvailable) {
+          window.speechSynthesis.resume()
+        }
+        setIsPaused(false)
+      } else {
+        if (playbackMode === 'audio' && audioRef.current) {
+          audioRef.current.pause()
+        } else if (speechIsAvailable) {
+          window.speechSynthesis.pause()
+        }
+        setIsPaused(true)
+      }
       return
     }
 
     setSpeechError('')
+    setIsPaused(false)
     if (audioAvailable && audioRef.current) {
       try {
         await audioRef.current.play()
@@ -232,22 +260,30 @@ function ChapterNarration({ chapter }) {
           src={chapter.audio}
           preload="none"
           onError={() => setAudioAvailable(false)}
-          onEnded={() => setPlaybackMode(null)}
+          onEnded={() => {
+            setPlaybackMode(null)
+            setIsPaused(false)
+          }}
           aria-hidden="true"
           tabIndex={-1}
         />
       )}
       <button
-        className={`speech-toggle${playbackMode ? ' playing floating' : ''}`}
+        className={`speech-toggle${playbackMode && !isPaused ? ' playing floating' : isPaused ? ' paused' : ''}`}
         type="button"
         aria-pressed={Boolean(playbackMode)}
         onClick={togglePlayback}
-        title={playbackMode ? 'Click to pause narration' : 'Listen to story'}
+        title={isPaused ? 'Click to resume' : playbackMode ? 'Click to pause' : 'Listen to story'}
       >
-        {playbackMode ? (
+        {isPaused ? (
+          <>
+            <Play size={15} strokeWidth={2} aria-hidden="true" />
+            <span>Resume</span>
+          </>
+        ) : playbackMode ? (
           <>
             <ThinkingOrb state="listening" size={28} theme="light" ariaLabel="Narration playing" />
-            <span className="narration-floating-text">Pause narration</span>
+            <span className="narration-floating-text">Pause</span>
           </>
         ) : (
           <>
@@ -1178,7 +1214,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
         {/* Navigation Arrows */}
         {showPrevButton && (
           <button
-            className="book-arrow book-arrow-previous"
+            className={`book-arrow book-arrow-previous${!isOpen ? ' cover-navigation' : ''}`}
             type="button"
             aria-label={
               !isOpen && isBackCover
@@ -1193,12 +1229,13 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
             }}
             disabled={isFlipping}
           >
-            <span className="book-chevron" aria-hidden="true">‹</span>
+            <span className="book-arrow-icon" aria-hidden="true">‹</span>
+            <span className="book-arrow-text">{!isOpen && isBackCover ? 'RETURN' : 'BACK'}</span>
           </button>
         )}
         {showNextButton && (
           <button
-            className="book-arrow book-arrow-next"
+            className={`book-arrow book-arrow-next${!isOpen ? ' cover-navigation' : ''}`}
             type="button"
             aria-label={!isOpen ? 'Open book' : spread === maxSpread ? 'Close book' : 'Next page'}
             disabled={isFlipping}
@@ -1207,7 +1244,8 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
               goNext()
             }}
           >
-            <span className="book-chevron" aria-hidden="true">›</span>
+            <span className="book-arrow-text">{!isOpen ? 'OPEN BOOK' : 'NEXT'}</span>
+            <span className="book-arrow-icon" aria-hidden="true">›</span>
           </button>
         )}
       </section>
