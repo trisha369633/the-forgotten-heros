@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Mic, Move, Volume2, VolumeX } from 'lucide-react'
+import { Mic, Move } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import gsap from 'gsap'
@@ -192,11 +192,25 @@ function BackgroundMusic({ isModalOpen }) {
         type="button"
         onClick={toggleMusic}
         aria-pressed={enabled}
-        aria-label={enabled ? 'Mute background sound' : 'Play background sound'}
-        title={message || (enabled ? 'Mute background sound' : 'Play background sound')}
+        aria-label={enabled ? 'Turn background sound off' : 'Turn background sound on'}
+        aria-description={message || undefined}
+        title={enabled ? 'Turn background sound off' : 'Turn background sound on'}
       >
-        {enabled ? <Volume2 size={18} aria-hidden="true" /> : <VolumeX size={18} aria-hidden="true" />}
-        <span>Background sound</span>
+        <svg
+          viewBox="0 0 24 24"
+          width="24"
+          height="24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.75"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <rect x="9" y="2" width="6" height="12" rx="3" />
+          <path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8" />
+          {!enabled && <path d="m4 4 16 16" />}
+        </svg>
       </button>
     </div>
   )
