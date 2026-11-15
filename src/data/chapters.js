@@ -138,8 +138,10 @@ const voiceFiles = {
 }
 
 const videoFiles = {
-  2: 'Mars in a Minute How Do Rovers Drive on Mars - NASA Jet Propulsion Laboratory (720p, h264).mp4',
+  2: 'video.mp4',
+  3: 'Mars in a Minute How Do Rovers Drive on Mars - NASA Jet Propulsion Laboratory (720p, h264).mp4',
   4: 'The Hubble Space Telescope - One Minute History - One Minute History (720p, h264).mp4',
+  5: 'golden record.mp4',
   6: 'Viking Lander animation (1970s) [HD source] - Retro Space HD (720p, h264).mp4',
   7: 'OTD in Space – May 20 NASA Launches Pioneer Venus 1 - VideoFromSpace (720p, h264).mp4',
   8: 'Anatomy of the Lunar Module - ABC News (480p, h264).mp4',
