@@ -1,11 +1,41 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Mic, Move } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import gsap from 'gsap'
 import VideoPlayer from './VideoPlayer.jsx'
-import ThinkingOrb from './ThinkingOrb.jsx'
 import { chapters } from '../data/chapters.js'
+import { questions } from '../data/quiz.js'
 import './StoryBook.css'
+
+const QUIZ_QUESTIONS_PER_PAGE = 3
+const QUIZ_PAGES = 2
+const displayedQuizQuestions = questions.slice(0, QUIZ_QUESTIONS_PER_PAGE * QUIZ_PAGES)
+const quizPages = Array.from({ length: QUIZ_PAGES }, (_, pageIndex) => {
+  const questionStart = pageIndex * QUIZ_QUESTIONS_PER_PAGE
+  return {
+    questionStart,
+    questions: displayedQuizQuestions.slice(questionStart, questionStart + QUIZ_QUESTIONS_PER_PAGE),
+  }
+})
+
+const chapterFirstSpreads = new Map()
+const bookSpreads = [{ chapter: null, type: 'contents' }]
+
+chapters.forEach((chapter) => {
+  chapterFirstSpreads.set(chapter.number, bookSpreads.length)
+  if (chapter.number === 10) {
+    quizPages.forEach((quizPage, quizPageIndex) => {
+      bookSpreads.push({ chapter, type: 'quiz', quizPageIndex, ...quizPage })
+    })
+  } else {
+    bookSpreads.push({ chapter, type: 'chapter' })
+  }
+})
+
+const lastSpreadIndex = bookSpreads.length - 1
+const firstSpreadForChapter = (chapterNumber) => chapterFirstSpreads.get(chapterNumber) ?? 0
+const chapterNumberForSpread = (spreadIndex) => bookSpreads[spreadIndex]?.chapter?.number ?? 1
 
 function MicrophoneIcon({ muted }) {
   return (
@@ -26,9 +56,42 @@ function MicrophoneIcon({ muted }) {
   )
 }
 
-function BackgroundMusic() {
+function BackgroundMusic({ isModalOpen }) {
   const [enabled, setEnabled] = useState(false)
   const [message, setMessage] = useState('')
+  const modalWasOpenRef = useRef(false)
+  const wasPlayingBeforeModalRef = useRef(false)
+
+  useEffect(() => {
+    const audio = document.getElementById('background-music')
+
+    if (isModalOpen && !modalWasOpenRef.current) {
+      modalWasOpenRef.current = true
+      wasPlayingBeforeModalRef.current = enabled
+      if (enabled && audio) {
+        audio.pause()
+      }
+      return
+    }
+
+    if (!isModalOpen && modalWasOpenRef.current) {
+      modalWasOpenRef.current = false
+      if (!wasPlayingBeforeModalRef.current) return
+
+      wasPlayingBeforeModalRef.current = false
+      if (!audio) return
+
+      audio.play()
+        .then(() => {
+          setEnabled(true)
+          setMessage('')
+        })
+        .catch(() => {
+          setEnabled(false)
+          setMessage('Background music is not available yet')
+        })
+    }
+  }, [enabled, isModalOpen])
 
   async function toggleMusic() {
     const audio = document.getElementById('background-music')
@@ -80,10 +143,41 @@ function BackgroundMusic() {
 }
 
 const resolvedImageCache = new Map()
+const videoAvailabilityCache = new Map()
 
-function ChapterMedia({ chapter }) {
-  const isVideo = chapter.media.type === 'video'
+function useVideoAvailable(src) {
+  const [result, setResult] = useState(null)
 
+  useEffect(() => {
+    let active = true
+
+    if (!src || videoAvailabilityCache.has(src)) return () => {
+      active = false
+    }
+
+    fetch(src, { method: 'HEAD' })
+      .then((response) => {
+        const contentType = response.headers.get('content-type')?.toLowerCase() || ''
+        const available = response.ok && contentType.startsWith('video/')
+        videoAvailabilityCache.set(src, available)
+        if (active) setResult({ src, available })
+      })
+      .catch(() => {
+        videoAvailabilityCache.set(src, false)
+        if (active) setResult({ src, available: false })
+      })
+
+    return () => {
+      active = false
+    }
+  }, [src])
+
+  if (!src) return false
+  if (videoAvailabilityCache.has(src)) return videoAvailabilityCache.get(src)
+  return result?.src === src && result.available
+}
+
+function ChapterMedia({ chapter, onOpenVideo }) {
   const candidates = [
     `/media/chapter-${chapter.id}/images/chapter${chapter.number}.jpeg`,
     `/media/chapter-${chapter.id}/images/chapter-${chapter.id}.jpeg`,
@@ -96,6 +190,9 @@ function ChapterMedia({ chapter }) {
   const [currentSrc, setCurrentSrc] = useState(cachedSrc || candidates[0])
   const [candidateIndex, setCandidateIndex] = useState(0)
   const [imageUnavailable, setImageUnavailable] = useState(false)
+  const [isVideo, setIsVideo] = useState(false)
+  const [videoFailed, setVideoFailed] = useState(false)
+  const videoAvailable = useVideoAvailable(chapter.media.video)
 
   const handleImageLoad = (e) => {
     resolvedImageCache.set(chapter.id, e.currentTarget.src)
@@ -111,13 +208,24 @@ function ChapterMedia({ chapter }) {
     }
   }
 
+  const usesVideoDialog = chapter.number >= 3 && chapter.number <= 8
+
+  const handleVideoError = () => {
+    if (usesVideoDialog) return
+    setIsVideo(false)
+    setVideoFailed(true)
+    if (chapter.media.video) videoAvailabilityCache.set(chapter.media.video, false)
+  }
+
   return (
-    <>
+    <div className="chapter-media-block">
       <div className="media-frame">
         {isVideo ? (
           <VideoPlayer
             src={chapter.media.video}
+            poster={currentSrc}
             title={`Chapter ${chapter.number} video`}
+            onError={handleVideoError}
           />
         ) : imageUnavailable ? (
           <div className="media-placeholder" role="status">
@@ -144,35 +252,147 @@ function ChapterMedia({ chapter }) {
             : `THE FORGOTTEN HEROES · ${chapter.id}`}
         </span>
       </div>
-      <NASADataCard chapter={chapter} />
-    </>
+      {videoAvailable && !videoFailed && (
+        usesVideoDialog ? (
+          <button
+            className="nasa-video-button book-type"
+            type="button"
+            aria-label={`Play NASA's real video for chapter ${chapter.number}`}
+            aria-haspopup="dialog"
+            onClick={(event) => {
+              event.stopPropagation()
+              onOpenVideo?.({
+                chapter,
+                src: chapter.media.video,
+                poster: currentSrc,
+                trigger: event.currentTarget,
+                onError: handleVideoError,
+              })
+            }}
+          >
+            <svg viewBox="0 0 12 12" aria-hidden="true">
+              <path d="M3 1.8v8.4L10 6 3 1.8Z" fill="currentColor" />
+            </svg>
+            <span>NASA's real video</span>
+          </button>
+        ) : (
+          <button
+            className="watch-video-button book-type"
+            type="button"
+            aria-label={`${isVideo ? 'Show image' : 'Watch video'} for chapter ${chapter.number}`}
+            onClick={(event) => {
+              event.stopPropagation()
+              setIsVideo((visible) => !visible)
+            }}
+          >
+            {!isVideo && (
+              <svg viewBox="0 0 12 12" aria-hidden="true">
+                <path d="M3 1.8v8.4L10 6 3 1.8Z" fill="currentColor" />
+              </svg>
+            )}
+            <span>{isVideo ? 'Show image' : 'Watch video'}</span>
+          </button>
+        )
+      )}
+    </div>
   )
 }
 
-function NASADataCard({ chapter }) {
-  const nasaData = chapter.nasaData
+function VideoModal({ video, onClose, reduceMotion }) {
+  const dialogRef = useRef(null)
+  const closeButtonRef = useRef(null)
+  const [loadError, setLoadError] = useState(false)
 
-  if (!nasaData) {
-    return (
-      <div className="data-card data-card-placeholder">
-        <strong>NASA's real data</strong>
-        <p>NASA reference coming soon for this chapter.</p>
-      </div>
-    )
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    closeButtonRef.current?.focus()
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+      if (video.trigger?.isConnected) video.trigger.focus()
+    }
+  }, [video.trigger])
+
+  function handleKeyDown(event) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      onClose()
+      return
+    }
+
+    if (event.key !== 'Tab') return
+
+    const focusable = [...dialogRef.current.querySelectorAll(
+      'button:not(:disabled), video[controls], a[href], [tabindex]:not([tabindex="-1"])',
+    )]
+    if (focusable.length === 0) {
+      event.preventDefault()
+      return
+    }
+
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (event.shiftKey && (document.activeElement === first || !dialogRef.current.contains(document.activeElement))) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && (document.activeElement === last || !dialogRef.current.contains(document.activeElement))) {
+      event.preventDefault()
+      first.focus()
+    }
   }
 
-  return (
-    <a
-      className="data-card"
-      href={nasaData.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={(e) => e.stopPropagation()}
+  return createPortal(
+    <div
+      className={`video-modal-backdrop${reduceMotion ? ' reduced-motion' : ''}`}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
     >
-      <div className="data-card-badge">NASA Real Data</div>
-      <p>{nasaData.fact}</p>
-      <small>Open on nasa.gov ↗</small>
-    </a>
+      <div
+        ref={dialogRef}
+        className="video-modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`NASA's real video, Chapter ${video.chapter.number}`}
+        tabIndex={-1}
+        onKeyDown={handleKeyDown}
+      >
+        <p className="video-modal-caption">
+          NASA's real video · Chapter {video.chapter.number}: {video.chapter.title}
+        </p>
+        <div className="video-modal-frame">
+          <button
+            ref={closeButtonRef}
+            className="video-modal-close"
+            type="button"
+            aria-label="Close video"
+            onClick={onClose}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
+          {loadError ? (
+            <div className="video-modal-error" role="status">
+              This video could not be loaded.
+            </div>
+          ) : (
+            <VideoPlayer
+              src={video.src}
+              poster={video.poster}
+              title={`NASA's real video, Chapter ${video.chapter.number}`}
+              autoPlay
+              onError={() => {
+                setLoadError(true)
+                video.onError?.()
+              }}
+            />
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -272,20 +492,72 @@ function ChapterNarration({ chapter }) {
         aria-pressed={Boolean(playbackMode)}
         onClick={togglePlayback}
       >
-        {playbackMode ? (
-          <>
-            <ThinkingOrb state="listening" size={20} theme="dark" ariaLabel="Narration playing" />
-            <span>Pause narration</span>
-          </>
-        ) : (
-          <>
-            <Mic size={15} strokeWidth={2} aria-hidden="true" />
-            <span>Listen to story</span>
-          </>
-        )}
+        <Mic size={15} strokeWidth={2} aria-hidden="true" />
+        <span>{playbackMode ? 'Stop listening' : 'Listen to the story'}</span>
       </button>
       {speechError && <span className="narration-placeholder" role="status">{speechError}</span>}
     </div>
+  )
+}
+
+function QuizQuestion({ item, questionIndex, spreadIndex, selectedAnswer, onAnswer }) {
+  const isAnswered = selectedAnswer !== undefined
+  const isCorrect = selectedAnswer === item.answer
+  const optionLetter = (index) => String.fromCharCode(65 + index)
+
+  return (
+    <section
+      className="quiz-question"
+      role="group"
+      aria-labelledby={`quiz-question-${spreadIndex}-${questionIndex}`}
+    >
+      <h3
+        className="quiz-question-text"
+        id={`quiz-question-${spreadIndex}-${questionIndex}`}
+      >
+        {questionIndex + 1}. {item.question}
+      </h3>
+      <div className="quiz-options">
+        {item.options.map((option, optionIndex) => {
+          const isSelected = selectedAnswer === optionIndex
+          const isRightAnswer = item.answer === optionIndex
+          const optionClass = [
+            'quiz-option',
+            isAnswered && isRightAnswer ? 'is-correct' : '',
+            isAnswered && isSelected && !isRightAnswer ? 'is-wrong' : '',
+          ].filter(Boolean).join(' ')
+
+          return (
+            <button
+              className={optionClass}
+              key={option}
+              type="button"
+              disabled={isAnswered}
+              aria-pressed={isAnswered ? isSelected : undefined}
+              onClick={() => onAnswer(questionIndex, optionIndex)}
+            >
+              <span className="quiz-option-letter">{optionLetter(optionIndex)})</span>
+              <span className="quiz-option-text">{option}</span>
+              {isAnswered && isRightAnswer && (
+                <svg className="quiz-option-icon" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="m3 8 3.2 3.2L13 4.5" />
+                </svg>
+              )}
+              {isAnswered && isSelected && !isRightAnswer && (
+                <svg className="quiz-option-icon" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="m4 4 8 8m0-8-8 8" />
+                </svg>
+              )}
+            </button>
+          )
+        })}
+      </div>
+      <div className="quiz-answer-feedback" aria-live="polite">
+        {isAnswered && isCorrect && 'Correct!'}
+        {isAnswered && !isCorrect &&
+          `Not quite — the answer is ${optionLetter(item.answer)}) ${item.options[item.answer]}.`}
+      </div>
+    </section>
   )
 }
 
@@ -293,7 +565,101 @@ function PageNumber({ children }) {
   return <div className="page-number">{children}</div>
 }
 
-function PageLeft({ spreadIndex, chapters }) {
+function QuizCompletion({ quizAnswers, onTryAgain }) {
+  const answeredCount = displayedQuizQuestions.reduce(
+    (count, _, index) => count + (quizAnswers[index] !== undefined ? 1 : 0),
+    0,
+  )
+
+  if (answeredCount !== displayedQuizQuestions.length || displayedQuizQuestions.length === 0) return null
+
+  const score = displayedQuizQuestions.reduce(
+    (count, question, index) => count + (quizAnswers[index] === question.answer ? 1 : 0),
+    0,
+  )
+
+  return (
+    <div className="quiz-completion">
+      <p>You scored {score} of {displayedQuizQuestions.length}</p>
+      <button
+        className="speech-toggle quiz-try-again"
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation()
+          onTryAgain()
+        }}
+      >
+        Try again
+      </button>
+    </div>
+  )
+}
+
+function BackCover({ onReopen }) {
+  return (
+    <div
+      className="back-cover"
+      role="img"
+      aria-label="Back cover of The Forgotten Heroes"
+    >
+      <div className="back-cover-spine-edge" aria-hidden="true" />
+      <div className="back-cover-inner">
+        <svg className="back-cover-illustration" viewBox="0 0 300 220" aria-hidden="true">
+          <defs>
+            <radialGradient id="back-cover-planet" cx="0.35" cy="0.3" r="0.8">
+              <stop offset="0" stopColor="#94add8" />
+              <stop offset="60%" stopColor="#2b4170" />
+              <stop offset="100%" stopColor="#101935" />
+            </radialGradient>
+            <filter id="back-cover-glow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+          </defs>
+          <g fill="#f3ece0" opacity="0.65" aria-hidden="true">
+            <circle cx="30" cy="30" r="1.6" />
+            <circle cx="260" cy="24" r="1.2" />
+            <circle cx="270" cy="150" r="1.6" />
+            <circle cx="22" cy="170" r="1.2" />
+            <circle cx="150" cy="10" r="1.2" />
+            <circle cx="110" cy="205" r="1.4" />
+            <circle cx="215" cy="200" r="1" />
+          </g>
+          <ellipse
+            cx="150"
+            cy="110"
+            rx="128"
+            ry="38"
+            fill="none"
+            stroke="#fc3d21"
+            strokeWidth="2.5"
+            opacity="0.9"
+            transform="rotate(-22 150 110)"
+          />
+          <circle cx="150" cy="110" r="58" fill="url(#back-cover-planet)" />
+          <circle cx="262" cy="73" r="6" fill="#f3ece0" filter="url(#back-cover-glow)" />
+        </svg>
+        <h2 className="back-cover-title">The Forgotten Heroes</h2>
+        <p className="back-cover-subtitle">Inspired by NASA’s open space data</p>
+      </div>
+      <button
+        className="book-arrow back-cover-reopen"
+        type="button"
+        aria-label="Reopen book"
+        onClick={(event) => {
+          event.stopPropagation()
+          onReopen?.()
+        }}
+      >
+        <span className="book-chevron" aria-hidden="true">‹</span>
+      </button>
+    </div>
+  )
+}
+
+function PageLeft({ spreadIndex, quizAnswers, onQuizAnswer, isVideoModalOpen = false }) {
+  const spread = bookSpreads[spreadIndex]
+
   if (spreadIndex === 0) {
     return (
       <article className="book-page story-page credit-page">
@@ -311,45 +677,54 @@ function PageLeft({ spreadIndex, chapters }) {
     )
   }
 
-  if (spreadIndex === 11) {
-    const chapter = chapters[10]
+  const chapter = spread?.chapter
+  if (!chapter) return <article className="book-page story-page" />
+
+  if (chapter.number === 10) {
+    const isFirstQuizPage = spread.quizPageIndex === 0
     return (
-      <article className="book-page story-page epilogue-page">
+      <article className="book-page story-page book-type quiz-page">
         <div className="page-inner">
-          <div className="chapter-header-group">
-            <span className="chapter-number-kicker">EPILOGUE</span>
-            <h1 className="chapter-heading">{chapter?.title || 'The Hall of Heroes'}</h1>
+          {isFirstQuizPage ? (
+            <div className="chapter-header-group">
+              <h1 className="chapter-heading">Chapter {chapter.number}</h1>
+              <h2 className="chapter-subtitle">{chapter.title}</h2>
+            </div>
+          ) : (
+            <div className="quiz-page-header">Chapter 10 · {chapter.title}</div>
+          )}
+          <div className="quiz-content">
+            <div className="quiz-questions">
+              {spread.questions.map((item, index) => {
+                const questionIndex = spread.questionStart + index
+                return (
+                  <QuizQuestion
+                    key={questionIndex}
+                    item={item}
+                    questionIndex={questionIndex}
+                    spreadIndex={spreadIndex}
+                    selectedAnswer={quizAnswers[questionIndex]}
+                    onAnswer={onQuizAnswer}
+                  />
+                )
+              })}
+            </div>
           </div>
-          <div className="chapter-divider" aria-hidden="true" />
-          <div className="chapter-prose">
-            {chapter?.paragraphs?.map((paragraph, index) => (
-              <p className="chapter-copy" key={`epilogue-${index}`}>
-                {paragraph}
-              </p>
-            ))}
-          </div>
-          {chapter && <ChapterNarration key={chapter.id} chapter={chapter} />}
-          <PageNumber>23</PageNumber>
+          <PageNumber>{spreadIndex * 2 + 1}</PageNumber>
         </div>
       </article>
     )
   }
 
-  const chapterIndex = spreadIndex - 1
-  const chapter = chapters[chapterIndex]
-  if (!chapter) return <article className="book-page story-page" />
-
   const ChapterContent = chapter.Content
-  const pageNum = chapter.number * 2 + 1
 
   return (
-    <article className="book-page story-page">
+    <article className="book-page story-page book-type">
       <div className="page-inner">
         <div className="chapter-header-group">
-          <span className="chapter-number-kicker">Chapter {String(chapter.number).padStart(2, '0')}</span>
-          <h1 className="chapter-heading">{chapter.title || 'Original title pending'}</h1>
+          <h1 className="chapter-heading">Chapter {chapter.number}</h1>
+          <h2 className="chapter-subtitle">{chapter.title || 'Original title pending'}</h2>
         </div>
-        <div className="chapter-divider" aria-hidden="true" />
         <div className="chapter-prose">
           {chapter.paragraphs
             ? chapter.paragraphs.map((paragraph, index) => (
@@ -360,91 +735,44 @@ function PageLeft({ spreadIndex, chapters }) {
             : <ChapterContent />}
         </div>
         {chapter.kind === 'story' && (
-          <ChapterNarration key={chapter.id} chapter={chapter} />
+          <ChapterNarration
+            key={`${chapter.id}-${isVideoModalOpen}`}
+            chapter={chapter}
+          />
         )}
-        <PageNumber>{pageNum}</PageNumber>
+        <PageNumber>{spreadIndex * 2 + 1}</PageNumber>
       </div>
     </article>
   )
 }
 
-function BlankEndpaperPage() {
+function QuizEndPage({ quizAnswers, onTryAgain }) {
   return (
-    <article className="book-page media-page endpaper-page">
-      <div className="page-inner endpaper-inner">
-        <div className="endpaper-center-art">
-          <span className="endpaper-symbol" aria-hidden="true">✦</span>
-          <span className="endpaper-title">THE END</span>
-          <span className="endpaper-sub">Ad astra per aspera</span>
+    <article className="book-page media-page book-type quiz-end-page">
+      <div className="page-inner quiz-end-inner">
+        <div className="quiz-end-content">
+          <span className="quiz-end-divider" aria-hidden="true" />
+          <h1>The End</h1>
+          <span className="quiz-end-divider" aria-hidden="true" />
+          <QuizCompletion quizAnswers={quizAnswers} onTryAgain={onTryAgain} />
         </div>
-        <div className="endpaper-close-hint">
-          <span>Click Next › to close book</span>
-        </div>
-        <PageNumber>24</PageNumber>
       </div>
     </article>
   )
 }
 
-function BackCover({ onReopen }) {
-  return (
-    <div
-      className="back-cover"
-      onClick={onReopen}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          onReopen?.()
-        }
-      }}
-      role="button"
-      tabIndex={0}
-      aria-label="Reopen The Forgotten Heroes book"
-    >
-      <div className="back-cover-spine-edge" aria-hidden="true" />
-      <div className="back-cover-inner">
-        <span className="back-cover-badge">NASA SPACE APPS CHALLENGE</span>
-        <h2 className="back-cover-title">The Forgotten Heroes</h2>
-        <div className="back-cover-rule" aria-hidden="true" />
-
-        <p className="back-cover-synopsis">
-          Join Akaay and his guide Atlas on an unforgettable journey through the wonders of space.
-          Meet the rovers, telescopes, and spacecraft that ventured beyond Earth, and discover how
-          their brave missions continue to inspire humanity's quest among the stars.
-        </p>
-
-        <div className="back-cover-missions">
-          <span className="mission-tag">Spirit &amp; Opportunity</span>
-          <span className="mission-tag">Hubble</span>
-          <span className="mission-tag">Voyager 1 &amp; 2</span>
-          <span className="mission-tag">Viking 1 &amp; 2</span>
-          <span className="mission-tag">Pioneer 10 &amp; 11</span>
-          <span className="mission-tag">Apollo 11</span>
-        </div>
-
-        <div className="back-cover-footer">
-          <div className="back-cover-citation">
-            <strong>NASA Open Data</strong>
-            <small>Inspired by real exploration archives</small>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function PageRight({ spreadIndex, chapters, onSelectChapter }) {
+function PageRight({ spreadIndex, chapters, onSelectChapter, onOpenVideo, quizAnswers, onTryAgain }) {
   if (spreadIndex === 0) {
     return (
-      <article className="book-page media-page contents-page">
+      <article className="book-page media-page contents-page book-type">
         <div className="page-inner contents-content">
           <h1 className="contents-heading">Chapters</h1>
           <ol className="contents-list">
             {chapters.map((item) => {
               const isAvailable = Boolean(item.title)
               const title = isAvailable ? item.title : 'Coming soon'
-              const page = item.number * 2 + 1
+              const firstSpread = chapterFirstSpreads.get(item.number)
+              const page = firstSpread * 2 + 1
 
               return (
                 <li key={item.id}>
@@ -458,8 +786,7 @@ function PageRight({ spreadIndex, chapters, onSelectChapter }) {
                     }}
                   >
                     <span className="entry-title">
-                      <span className="entry-num">{String(item.number).padStart(2, '0')}</span>
-                      <span className="entry-text">{title}</span>
+                      <span className="entry-text">Chapter {item.number}: {title}</span>
                     </span>
                     <i aria-hidden="true" />
                     <b>{page}</b>
@@ -474,21 +801,19 @@ function PageRight({ spreadIndex, chapters, onSelectChapter }) {
     )
   }
 
-  if (spreadIndex === 11) {
-    return <BlankEndpaperPage />
-  }
-
-  const chapterIndex = spreadIndex - 1
-  const chapter = chapters[chapterIndex]
+  const spread = bookSpreads[spreadIndex]
+  const chapter = spread?.chapter
   if (!chapter) return <article className="book-page media-page" />
 
-  const pageNum = chapter.number * 2 + 2
+  if (spread.type === 'quiz' && spread.quizPageIndex === QUIZ_PAGES - 1) {
+    return <QuizEndPage quizAnswers={quizAnswers} onTryAgain={onTryAgain} />
+  }
 
   return (
     <article className="book-page media-page">
       <div className="page-inner media-content">
-        <ChapterMedia key={chapter.id} chapter={chapter} />
-        <PageNumber>{pageNum}</PageNumber>
+        <ChapterMedia key={chapter.id} chapter={chapter} onOpenVideo={onOpenVideo} />
+        <PageNumber>{spreadIndex * 2 + 2}</PageNumber>
       </div>
     </article>
   )
@@ -545,12 +870,15 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
   const [isOpen, setIsOpen] = useState(initialOpen)
   const [isBackCover, setIsBackCover] = useState(false)
   const [spread, setSpread] = useState(() => (
-    !startClosed && chapter?.number ? chapter.number : 0
+    !startClosed && chapter?.number ? firstSpreadForChapter(chapter.number) : 0
   ))
+  const [quizAnswers, setQuizAnswers] = useState({})
+  const [activeVideo, setActiveVideo] = useState(null)
   const [flipState, setFlipState] = useState(null)
   const [isFlipping, setIsFlipping] = useState(false)
 
   const isFlippingRef = useRef(false)
+  const pendingSpreadRef = useRef(null)
   const bookRef = useRef(null)
   const coverRef = useRef(null)
   const leafRef = useRef(null)
@@ -558,6 +886,11 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
   const rightShadowRef = useRef(null)
   const leafLightingFrontRef = useRef(null)
   const leafLightingBackRef = useRef(null)
+
+  const openVideo = useCallback((video) => {
+    setActiveVideo({ ...video, spreadIndex: spread })
+  }, [spread])
+  const closeVideo = useCallback(() => setActiveVideo(null), [])
 
   const chapterPath = (number) =>
     number === 0 ? '/chapter/01' : `/chapter/${String(number).padStart(2, '0')}`
@@ -573,9 +906,16 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
   // Synchronize on direct URL navigation and mount
   useEffect(() => {
     if (!startClosed && !isFlippingRef.current && chapter?.number) {
+      const pendingSpread = pendingSpreadRef.current
+      const pendingChapter = pendingSpread === null
+        ? null
+        : bookSpreads[pendingSpread]?.chapter?.number
+      const targetSpread = pendingChapter === chapter.number
+        ? pendingSpread
+        : firstSpreadForChapter(chapter.number)
+      pendingSpreadRef.current = null
       setIsOpen(true)
-      setIsBackCover(false)
-      setSpread(chapter.number)
+      setSpread(targetSpread)
       if (bookRef.current) {
         gsap.set(bookRef.current, { xPercent: 0, x: 0 })
       }
@@ -583,14 +923,20 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
         gsap.set(coverRef.current, { rotationY: -180 })
       }
     }
-  }, [chapter?.id, chapter?.number, startClosed])
+  }, [activeVideo, chapter?.id, chapter?.number, startClosed])
+
+  useLayoutEffect(() => {
+    if (isOpen && spread === 0 && coverRef.current) {
+      gsap.set(coverRef.current, { rotationY: -180 })
+    }
+  }, [isOpen, spread])
 
   // Open the book from closed cover
   const openBook = useCallback((targetSpread = 0) => {
     if (isFlippingRef.current) return
+    setActiveVideo(null)
     isFlippingRef.current = true
     setIsFlipping(true)
-    setIsBackCover(false)
 
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel()
@@ -599,12 +945,12 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
     const tl = gsap.timeline({
       onComplete: () => {
         setIsOpen(true)
-        setIsBackCover(false)
         setSpread(targetSpread)
         setIsFlipping(false)
         isFlippingRef.current = false
         if (targetSpread > 0) {
-          navigate(chapterPath(targetSpread))
+          pendingSpreadRef.current = targetSpread
+          navigate(chapterPath(chapterNumberForSpread(targetSpread)))
         }
       },
     })
@@ -628,8 +974,10 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
   // Close the book back to cover
   const closeBook = useCallback(() => {
     if (isFlippingRef.current) return
+    setActiveVideo(null)
     isFlippingRef.current = true
     setIsFlipping(true)
+    setIsBackCover(false)
 
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel()
@@ -638,7 +986,6 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
     const tl = gsap.timeline({
       onComplete: () => {
         setIsOpen(false)
-        setIsBackCover(false)
         setSpread(0)
         setIsFlipping(false)
         isFlippingRef.current = false
@@ -661,9 +1008,10 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
     applyMotionPreference(tl)
   }, [applyMotionPreference])
 
-  // Close the book forward to the Back Cover
+  // Close the book forward to the back cover
   const closeToBackCover = useCallback(() => {
     if (isFlippingRef.current) return
+    setActiveVideo(null)
     isFlippingRef.current = true
     setIsFlipping(true)
 
@@ -673,14 +1021,15 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
 
     setFlipState({
       direction: 'close-back',
-      fromSpread: 11,
-      toSpread: 11,
+      fromSpread: lastSpreadIndex,
+      toSpread: lastSpreadIndex,
     })
   }, [])
 
-  // Reopen the book from the Back Cover
-  const openFromBackCover = useCallback((targetSpread = 11) => {
+  // Reopen the book from the back cover
+  const openFromBackCover = useCallback((targetSpread = lastSpreadIndex) => {
     if (isFlippingRef.current) return
+    setActiveVideo(null)
     isFlippingRef.current = true
     setIsFlipping(true)
 
@@ -689,10 +1038,11 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
     }
 
     setIsOpen(true)
+    setIsBackCover(false)
     setSpread(targetSpread)
     setFlipState({
       direction: 'open-back',
-      fromSpread: 11,
+      fromSpread: lastSpreadIndex,
       toSpread: targetSpread,
     })
   }, [])
@@ -700,6 +1050,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
   // Turn page forward or backward with 3D leaf flip
   const turnToSpread = useCallback((targetSpread) => {
     if (isFlippingRef.current || targetSpread === spread) return
+    setActiveVideo(null)
     const direction = targetSpread > spread ? 'next' : 'prev'
 
     isFlippingRef.current = true
@@ -788,7 +1139,8 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
           setFlipState(null)
           setIsFlipping(false)
           isFlippingRef.current = false
-          navigate(chapterPath(toSpread))
+          pendingSpreadRef.current = toSpread
+          navigate(chapterPath(chapterNumberForSpread(toSpread)))
         },
       })
 
@@ -832,7 +1184,8 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
         setFlipState(null)
         setIsFlipping(false)
         isFlippingRef.current = false
-        navigate(chapterPath(toSpread))
+        pendingSpreadRef.current = toSpread
+        navigate(chapterPath(chapterNumberForSpread(toSpread)))
       },
     })
 
@@ -951,30 +1304,31 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
     }
   }, [applyMotionPreference, flipState, navigate])
 
-  const maxSpread = 11
+  const maxSpread = lastSpreadIndex
+  const activeChapter = bookSpreads[spread]?.chapter
+  const activeChapterLabel = activeChapter?.number === 10
+    ? `chapter 10: ${activeChapter.title}`
+    : `chapter ${chapterNumberForSpread(spread)}`
 
   const goNext = useCallback(() => {
     if (isFlippingRef.current) return
     if (!isOpen) {
-      if (isBackCover) {
-        openFromBackCover(11)
-      } else {
-        openBook(0)
-      }
+      openBook(0)
     } else if (spread < maxSpread) {
       turnToSpread(spread + 1)
     } else if (spread === maxSpread) {
       closeToBackCover()
     }
-  }, [closeToBackCover, isBackCover, isOpen, maxSpread, openBook, openFromBackCover, spread, turnToSpread])
+  }, [closeToBackCover, isOpen, maxSpread, openBook, spread, turnToSpread])
 
   const goPrevious = useCallback(() => {
     if (isFlippingRef.current) return
-    if (!isOpen) {
-      if (isBackCover) {
-        openFromBackCover(11)
-      }
-    } else if (spread === 0) {
+    if (!isOpen && isBackCover) {
+      openFromBackCover(lastSpreadIndex)
+      return
+    }
+    if (!isOpen) return
+    if (spread === 0) {
       closeBook()
     } else {
       turnToSpread(spread - 1)
@@ -982,16 +1336,26 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
   }, [closeBook, isBackCover, isOpen, openFromBackCover, spread, turnToSpread])
 
   const goToChapter = useCallback((number) => {
+    const targetSpread = firstSpreadForChapter(number)
     if (!isOpen) {
-      if (isBackCover) {
-        openFromBackCover(number)
-      } else {
-        openBook(number)
-      }
+      openBook(targetSpread)
     } else {
-      turnToSpread(number)
+      turnToSpread(targetSpread)
     }
-  }, [isBackCover, isOpen, openBook, openFromBackCover, turnToSpread])
+  }, [isOpen, openBook, turnToSpread])
+
+  const handleQuizAnswer = useCallback((questionIndex, answerIndex) => {
+    setQuizAnswers((currentAnswers) => (
+      currentAnswers[questionIndex] === undefined
+        ? { ...currentAnswers, [questionIndex]: answerIndex }
+        : currentAnswers
+    ))
+  }, [])
+
+  const handleTryAgain = useCallback(() => {
+    setQuizAnswers({})
+    goToChapter(10)
+  }, [goToChapter])
 
   // Native Apple Books edge click
   const handleSpreadClick = (e) => {
@@ -1014,6 +1378,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
   useEffect(() => {
     function handleKeyDown(event) {
       if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return
+      if (activeVideo) return
       if (
         event.target instanceof Element &&
         event.target.closest('input, textarea, select, audio, video, [contenteditable="true"]')
@@ -1024,24 +1389,34 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
       if (event.key === 'ArrowRight') {
         if (!isOpen && !isBackCover) {
           openBook(0)
-        } else if (!isOpen && isBackCover) {
-          openFromBackCover(11)
         } else if (isOpen) {
-          goNext()
+          if (spread === maxSpread) {
+            closeToBackCover()
+          } else {
+            goNext()
+          }
         }
       }
       if (event.key === 'ArrowLeft') {
         if (!isOpen && isBackCover) {
-          openFromBackCover(11)
+          openFromBackCover(lastSpreadIndex)
         } else if (isOpen) {
           goPrevious()
         }
       }
     }
 
+    function handlePopState() {
+      closeVideo()
+    }
+
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [goNext, goPrevious, isBackCover, isOpen, openBook, openFromBackCover])
+    window.addEventListener('popstate', handlePopState)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('popstate', handlePopState)
+    }
+  }, [activeVideo, closeToBackCover, closeVideo, goNext, goPrevious, isBackCover, isOpen, maxSpread, openBook, openFromBackCover, spread])
 
   const showPrevButton = isOpen || (!isOpen && isBackCover)
   const showNextButton = isOpen || (!isOpen && !isBackCover)
@@ -1049,7 +1424,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
   return (
     <main className={`storybook-shell${reduceMotion ? ' reduced-motion' : ''}`}>
       <div className="storybook-controls">
-        <BackgroundMusic />
+        <BackgroundMusic isModalOpen={Boolean(activeVideo)} />
         <button
           className="motion-toggle"
           type="button"
@@ -1068,7 +1443,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
         className={`book${isOpen ? ' open' : ''}${!isOpen && isBackCover ? ' back-active' : ''}${isFlipping ? ' is-flipping' : ''}`}
         aria-label={
           isOpen
-            ? `The Forgotten Heroes, ${spread === 0 ? 'contents' : `chapter ${spread}`}`
+            ? `The Forgotten Heroes, ${spread === 0 ? 'contents' : activeChapterLabel}`
             : isBackCover
             ? 'The Forgotten Heroes, back cover'
             : 'The Forgotten Heroes, closed book'
@@ -1080,7 +1455,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
         <div
           className="book-spread"
           aria-hidden={!isOpen}
-          style={{ visibility: (isOpen || isFlipping) && !(isBackCover && !isFlipping) ? 'visible' : 'hidden' }}
+          style={{ visibility: isOpen || isFlipping ? 'visible' : 'hidden' }}
           onClick={handleSpreadClick}
         >
           {/* Left Stationary Page */}
@@ -1088,12 +1463,14 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
             <PageLeft
               spreadIndex={
                 isFlipping && flipState
-                  ? flipState.direction === 'next' || flipState.direction === 'close-back'
+                  ? flipState.direction === 'next'
                     ? flipState.fromSpread
                     : flipState.toSpread
                   : spread
               }
-              chapters={chapters}
+              quizAnswers={quizAnswers}
+              onQuizAnswer={handleQuizAnswer}
+              isVideoModalOpen={Boolean(activeVideo)}
             />
             <div ref={leftShadowRef} className="page-shadow-overlay shadow-left" aria-hidden="true" />
           </div>
@@ -1108,13 +1485,14 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
                 isFlipping && flipState
                   ? flipState.direction === 'next'
                     ? flipState.toSpread
-                    : flipState.direction === 'close-back'
-                    ? 11
                     : flipState.fromSpread
                   : spread
               }
               chapters={chapters}
               onSelectChapter={goToChapter}
+              onOpenVideo={openVideo}
+              quizAnswers={quizAnswers}
+              onTryAgain={handleTryAgain}
             />
             <div ref={rightShadowRef} className="page-shadow-overlay shadow-right" aria-hidden="true" />
           </div>
@@ -1128,38 +1506,38 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
             aria-hidden="true"
           >
             <div className="leaf-face leaf-face-front">
-              {flipState.direction === 'close-back' || flipState.direction === 'open-back' ? (
-                <BlankEndpaperPage />
-              ) : flipState.direction === 'next' ? (
+              {flipState.direction === 'next' ? (
                 <PageRight
                   spreadIndex={flipState.fromSpread}
                   chapters={chapters}
                   onSelectChapter={() => {}}
+                  quizAnswers={quizAnswers}
+                  onTryAgain={handleTryAgain}
                 />
               ) : (
                 <PageLeft
                   spreadIndex={flipState.fromSpread}
-                  chapters={chapters}
+                  quizAnswers={quizAnswers}
+                  onQuizAnswer={handleQuizAnswer}
                 />
               )}
               <div className="leaf-shadow-crease" />
               <div ref={leafLightingFrontRef} className="leaf-lighting-overlay" />
             </div>
             <div className="leaf-face leaf-face-back">
-              {flipState.direction === 'close-back' || flipState.direction === 'open-back' ? (
-                <BackCover
-                  onReopen={() => openFromBackCover(11)}
-                />
-              ) : flipState.direction === 'next' ? (
+              {flipState.direction === 'next' ? (
                 <PageLeft
                   spreadIndex={flipState.toSpread}
-                  chapters={chapters}
+                  quizAnswers={quizAnswers}
+                  onQuizAnswer={handleQuizAnswer}
                 />
               ) : (
                 <PageRight
                   spreadIndex={flipState.toSpread}
                   chapters={chapters}
                   onSelectChapter={() => {}}
+                  quizAnswers={quizAnswers}
+                  onTryAgain={handleTryAgain}
                 />
               )}
               <div className="leaf-shadow-crease" />
@@ -1169,7 +1547,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
         )}
 
         {/* Front Cover */}
-        {!isBackCover && (!isOpen || spread === 0) && (
+        {(!isOpen || spread === 0) && !isBackCover && (
           <div
             ref={coverRef}
             className="cover"
@@ -1193,14 +1571,8 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
           </div>
         )}
 
-        {/* Closed Back Cover */}
         {!isOpen && isBackCover && !isFlipping && (
-          <>
-            <div className="page-stack-back" aria-hidden="true" />
-            <BackCover
-              onReopen={() => openFromBackCover(11)}
-            />
-          </>
+          <BackCover onReopen={() => openFromBackCover(lastSpreadIndex)} />
         )}
 
         {/* Navigation Arrows */}
@@ -1208,13 +1580,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
           <button
             className="book-arrow book-arrow-previous"
             type="button"
-            aria-label={
-              !isOpen && isBackCover
-                ? 'Reopen book'
-                : spread === 0
-                ? 'Close book'
-                : 'Previous page'
-            }
+            aria-label={!isOpen && isBackCover ? 'Reopen book' : spread === 0 ? 'Close book' : 'Previous page'}
             onClick={(e) => {
               e.stopPropagation()
               goPrevious()
@@ -1229,7 +1595,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
             className="book-arrow book-arrow-next"
             type="button"
             aria-label={!isOpen ? 'Open book' : spread === maxSpread ? 'Close book' : 'Next page'}
-            disabled={isFlipping}
+            disabled={isFlipping || (!isOpen && isBackCover)}
             onClick={(e) => {
               e.stopPropagation()
               goNext()
@@ -1239,6 +1605,14 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
           </button>
         )}
       </section>
+      {activeVideo && (
+        <VideoModal
+          key={activeVideo.src}
+          video={activeVideo}
+          onClose={closeVideo}
+          reduceMotion={reduceMotion}
+        />
+      )}
     </main>
   )
 }
