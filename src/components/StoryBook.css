@@ -665,9 +665,16 @@
 /* Narration & Speech Controls */
 .chapter-narration {
   display: flex;
+  width: 100%;
   align-items: center;
+<<<<<<< HEAD
   gap: 0.7cqw;
   margin-top: 0;
+=======
+  justify-content: center;
+  gap: 1.2cqw;
+  margin-top: auto;
+>>>>>>> e74a871ce3aa1b07f4a9fd5fc3d17e9b2d7e3e72
   padding-top: 1.2cqw;
   flex: 0 0 auto;
 }
@@ -683,12 +690,23 @@
 .speech-toggle {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.7cqw;
+<<<<<<< HEAD
   padding: 0.6cqw 1.6cqw 0.6cqw 1cqw;
   color: #2a241c;
   border: 1px solid #7a6d5a;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.55);
+=======
+  padding: 0;
+  color: #241d15;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+>>>>>>> e74a871ce3aa1b07f4a9fd5fc3d17e9b2d7e3e72
   cursor: pointer;
   font-family: 'EB Garamond', Georgia, serif;
   font-size: 1.4cqw;
@@ -698,17 +716,75 @@
 }
 
 .speech-toggle:hover {
+<<<<<<< HEAD
   background: rgba(255, 255, 255, 0.8);
+=======
+  background: transparent;
+  border-color: transparent;
+  transform: translateY(-1px);
+>>>>>>> e74a871ce3aa1b07f4a9fd5fc3d17e9b2d7e3e72
 }
 
 .speech-toggle[aria-pressed='true'],
 .speech-toggle.playing {
+<<<<<<< HEAD
   color: #f3ece0;
   background: #2a241c;
 }
 
 .speech-toggle.playing:hover {
   background: #2a241c;
+=======
+  gap: 0.7cqw;
+  padding: 0.2cqw 0;
+  color: #241d15;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  animation: orbLevitate 3.2s ease-in-out infinite alternate;
+}
+
+@keyframes orbLevitate {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-3px);
+  }
+}
+
+.speech-toggle.playing:hover {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  transform: translateY(-2px);
+}
+
+.speech-toggle.playing .narration-floating-text {
+  font-family: 'Avenir Next', Avenir, 'Segoe UI', sans-serif;
+  font-size: clamp(11px, 1.25cqw, 14px);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #3b2f20;
+  transition: color 180ms ease;
+}
+
+.speech-toggle.playing:hover .narration-floating-text,
+.speech-toggle.playing:hover span {
+  color: #fc3d21;
+}
+
+.speech-toggle .thinking-orb-canvas {
+  filter: drop-shadow(0 2px 6px rgba(252, 61, 33, 0.4));
+  transition: filter 200ms ease, transform 200ms ease;
+}
+
+.speech-toggle.playing:hover .thinking-orb-canvas {
+  filter: drop-shadow(0 2px 10px rgba(252, 61, 33, 0.7));
+  transform: scale(1.08);
+>>>>>>> e74a871ce3aa1b07f4a9fd5fc3d17e9b2d7e3e72
 }
 
 .narration-placeholder {
@@ -934,7 +1010,7 @@
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   transform: translate3d(0, 0, 0);
   -webkit-transform: translate3d(0, 0, 0);
   backface-visibility: hidden;
@@ -1049,37 +1125,74 @@
   position: absolute;
   z-index: 40;
   bottom: 2cqw;
-  display: grid;
-  width: max(3.8cqw, 42px);
-  height: max(3.8cqw, 42px);
-  place-items: center;
-  padding: 0;
-  color: #f3ece0;
-  border: 1.5px solid rgba(243, 236, 224, 0.35);
-  border-radius: 50%;
-  background: rgba(14, 21, 44, 0.85);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(4px, 0.4cqw, 6px);
+  min-height: clamp(32px, 4cqw, 42px);
+  padding: 2px clamp(8px, 0.8cqw, 12px);
+  color: #4a3e2f;
+  font-family: 'Charter', 'Baskerville', Georgia, serif;
+  font-size: clamp(10px, 1.45cqw, 15px);
+  font-weight: 300;
+  line-height: 1;
+  border: 1.5px solid rgba(122, 109, 90, 0.62);
+  border-radius: 999px;
+  background: rgba(246, 240, 228, 0.94);
+  box-shadow: 0 2px 8px rgba(67, 52, 33, 0.12);
   cursor: pointer;
-  transition: transform 180ms ease, opacity 180ms ease, background 180ms ease, border-color 180ms ease;
+  transition: transform 180ms ease, opacity 180ms ease, filter 180ms ease;
 }
 
-.book-chevron {
-  font-family: 'Charter', 'Baskerville', Georgia, serif;
-  font-size: 2.8cqw;
+.book-arrow-text {
+  color: #3b3024;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: 0.04em;
   line-height: 1;
-  transform: translateY(-0.1cqw);
+  text-transform: uppercase;
+}
+
+.book-arrow-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
+  color: #4a3e2f;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-family: 'Charter', 'Baskerville', Georgia, serif;
+  font-size: 1.5em;
+  font-weight: inherit;
+  line-height: 1;
+  transform: translateY(-0.04em);
+}
+
+.book-arrow.cover-navigation {
+  color: #e8e2d5;
+  border-color: rgba(145, 159, 184, 0.58);
+  background: rgba(22, 34, 60, 0.94);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.book-arrow.cover-navigation .book-arrow-text,
+.book-arrow.cover-navigation .book-arrow-icon {
+  color: #e8e2d5;
 }
 
 .book-arrow:hover:not(:disabled) {
-  background: #fc3d21;
-  border-color: #fc3d21;
-  transform: scale(1.1);
-  box-shadow: 0 0 20px rgba(252, 61, 33, 0.5);
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+}
+
+.book-arrow.cover-navigation:hover:not(:disabled) {
+  border-color: rgba(252, 92, 63, 0.72);
 }
 
 .book-arrow:disabled {
-  opacity: 0.25;
+  opacity: 0.3;
   cursor: default;
 }
 
@@ -1226,6 +1339,7 @@
   display: flex;
   width: 100%;
   flex-direction: column;
+<<<<<<< HEAD
   align-items: center;
   justify-content: center;
 }
@@ -1252,6 +1366,42 @@
   font-family: 'EB Garamond', Georgia, serif;
   font-size: clamp(12px, 1.4cqw, 18px);
   font-style: italic;
+=======
+  height: 100%;
+  padding: 4.8cqw 5cqw 4.2cqw !important;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.back-cover-badge {
+  align-self: center;
+  color: #fc3d21;
+  font-family: 'Avenir Next', Avenir, 'Segoe UI', sans-serif;
+  font-size: clamp(8px, 1.05cqw, 12px);
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.back-cover-title {
+  align-self: center;
+  margin: 0.4cqw 0 0;
+  color: #f7efe1;
+  font-family: 'Charter', 'Baskerville', Georgia, serif;
+  font-size: clamp(20px, 3cqw, 36px);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+
+.back-cover-rule {
+  width: 4.5cqw;
+  height: 0.2cqw;
+  margin: 1cqw auto 1.2cqw;
+  background: #fc3d21;
+  border-radius: 999px;
+>>>>>>> e74a871ce3aa1b07f4a9fd5fc3d17e9b2d7e3e72
 }
 
 .back-cover-reopen {
@@ -1261,6 +1411,7 @@
   z-index: 10;
 }
 
+<<<<<<< HEAD
 .back-cover-spine-edge {
   position: absolute;
   top: 0;
@@ -1269,6 +1420,48 @@
   height: 100%;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(0, 0, 0, 0.45));
   box-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.3);
+=======
+.back-cover-missions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.45cqw;
+  margin-bottom: auto;
+}
+
+.mission-tag {
+  padding: 0.3cqw 0.75cqw;
+  font-family: 'Avenir Next', Avenir, 'Segoe UI', sans-serif;
+  font-size: clamp(8px, 0.95cqw, 11px);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #e4dbcb;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+}
+
+.back-cover-footer {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  padding-top: 1cqw;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  text-align: center;
+}
+
+.back-cover-citation strong {
+  display: block;
+  color: #fc3d21;
+  font-size: clamp(10px, 1.1cqw, 13px);
+  letter-spacing: 0.05em;
+}
+
+.back-cover-citation small {
+  display: block;
+  color: #a89f8f;
+  font-size: clamp(8px, 0.9cqw, 11px);
+>>>>>>> e74a871ce3aa1b07f4a9fd5fc3d17e9b2d7e3e72
 }
 
 /* Accessible focus outlines */
@@ -1499,6 +1692,26 @@
   .book-arrow-next {
     right: 12px;
     bottom: 12px;
+  }
+
+  .book-arrow {
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    justify-content: center;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 20px;
+  }
+
+  .book-arrow-text {
+    display: none;
+  }
+
+  .book-arrow-icon {
+    width: auto;
+    height: auto;
+    font-size: 1.45em;
   }
 }
 

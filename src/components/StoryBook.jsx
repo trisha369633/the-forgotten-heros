@@ -1,6 +1,11 @@
+<<<<<<< HEAD
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Mic, Move } from 'lucide-react'
 import { createPortal } from 'react-dom'
+=======
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Mic, Move, Play } from 'lucide-react'
+>>>>>>> e74a871ce3aa1b07f4a9fd5fc3d17e9b2d7e3e72
 import { useNavigate } from 'react-router-dom'
 import gsap from 'gsap'
 import VideoPlayer from './VideoPlayer.jsx'
@@ -142,6 +147,7 @@ function BackgroundMusic({ isModalOpen }) {
   )
 }
 
+<<<<<<< HEAD
 const resolvedImageCache = new Map()
 const videoAvailabilityCache = new Map()
 
@@ -189,11 +195,16 @@ function ChapterMedia({ chapter, onOpenVideo }) {
   const cachedSrc = resolvedImageCache.get(chapter.id)
   const [currentSrc, setCurrentSrc] = useState(cachedSrc || candidates[0])
   const [candidateIndex, setCandidateIndex] = useState(0)
+=======
+function ChapterMedia({ chapter }) {
+  const isVideo = chapter.media.type === 'video'
+>>>>>>> e74a871ce3aa1b07f4a9fd5fc3d17e9b2d7e3e72
   const [imageUnavailable, setImageUnavailable] = useState(false)
   const [isVideo, setIsVideo] = useState(false)
   const [videoFailed, setVideoFailed] = useState(false)
   const videoAvailable = useVideoAvailable(chapter.media.video)
 
+<<<<<<< HEAD
   const handleImageLoad = (e) => {
     resolvedImageCache.set(chapter.id, e.currentTarget.src)
   }
@@ -217,6 +228,8 @@ function ChapterMedia({ chapter, onOpenVideo }) {
     if (chapter.media.video) videoAvailabilityCache.set(chapter.media.video, false)
   }
 
+=======
+>>>>>>> e74a871ce3aa1b07f4a9fd5fc3d17e9b2d7e3e72
   return (
     <div className="chapter-media-block">
       <div className="media-frame">
@@ -236,12 +249,11 @@ function ChapterMedia({ chapter, onOpenVideo }) {
         ) : (
           <img
             className="chapter-image"
-            src={currentSrc}
-            alt={`Illustration for chapter ${chapter.number}`}
+            src={chapter.media.src}
+            alt={`Illustration for ${chapter.title || `chapter ${chapter.number}`}`}
             loading="eager"
             decoding="async"
-            onLoad={handleImageLoad}
-            onError={handleImageError}
+            onError={() => setImageUnavailable(true)}
           />
         )}
         <span className="media-caption">
@@ -400,6 +412,7 @@ function ChapterNarration({ chapter }) {
   const audioRef = useRef(null)
   const utteranceRef = useRef(null)
   const [playbackMode, setPlaybackMode] = useState(null)
+  const [isPaused, setIsPaused] = useState(false)
   const [speechError, setSpeechError] = useState('')
   const [audioAvailable, setAudioAvailable] = useState(Boolean(chapter.audio))
 
@@ -420,16 +433,20 @@ function ChapterNarration({ chapter }) {
     utterance.onend = () => {
       utteranceRef.current = null
       setPlaybackMode(null)
+      setIsPaused(false)
     }
-    utterance.onerror = () => {
+    utterance.onerror = (event) => {
       utteranceRef.current = null
+      if (event.error === 'canceled' || event.error === 'interrupted') return
       setSpeechError('Speech narration could not be played.')
       setPlaybackMode(null)
+      setIsPaused(false)
     }
     window.speechSynthesis.cancel()
     utteranceRef.current = utterance
     window.speechSynthesis.speak(utterance)
     setPlaybackMode('speech')
+    setIsPaused(false)
   }
 
   const stopAll = useCallback(() => {
@@ -441,6 +458,7 @@ function ChapterNarration({ chapter }) {
     }
     utteranceRef.current = null
     setPlaybackMode(null)
+    setIsPaused(false)
   }, [speechIsAvailable])
 
   useEffect(() => {
@@ -452,11 +470,33 @@ function ChapterNarration({ chapter }) {
   async function togglePlayback(e) {
     e.stopPropagation()
     if (playbackMode) {
-      stopAll()
+      if (isPaused) {
+        if (playbackMode === 'audio' && audioRef.current) {
+          try {
+            await audioRef.current.play()
+          } catch {
+            setSpeechError('Narration could not be resumed.')
+            setPlaybackMode(null)
+            setIsPaused(false)
+            return
+          }
+        } else if (speechIsAvailable) {
+          window.speechSynthesis.resume()
+        }
+        setIsPaused(false)
+      } else {
+        if (playbackMode === 'audio' && audioRef.current) {
+          audioRef.current.pause()
+        } else if (speechIsAvailable) {
+          window.speechSynthesis.pause()
+        }
+        setIsPaused(true)
+      }
       return
     }
 
     setSpeechError('')
+    setIsPaused(false)
     if (audioAvailable && audioRef.current) {
       try {
         await audioRef.current.play()
@@ -481,19 +521,42 @@ function ChapterNarration({ chapter }) {
           src={chapter.audio}
           preload="none"
           onError={() => setAudioAvailable(false)}
-          onEnded={() => setPlaybackMode(null)}
+          onEnded={() => {
+            setPlaybackMode(null)
+            setIsPaused(false)
+          }}
           aria-hidden="true"
           tabIndex={-1}
         />
       )}
       <button
-        className={`speech-toggle${playbackMode ? ' playing' : ''}`}
+        className={`speech-toggle${playbackMode && !isPaused ? ' playing floating' : isPaused ? ' paused' : ''}`}
         type="button"
         aria-pressed={Boolean(playbackMode)}
         onClick={togglePlayback}
+        title={isPaused ? 'Click to resume' : playbackMode ? 'Click to pause' : 'Listen to story'}
       >
+<<<<<<< HEAD
         <Mic size={15} strokeWidth={2} aria-hidden="true" />
         <span>{playbackMode ? 'Stop listening' : 'Listen to the story'}</span>
+=======
+        {isPaused ? (
+          <>
+            <Play size={15} strokeWidth={2} aria-hidden="true" />
+            <span>Resume</span>
+          </>
+        ) : playbackMode ? (
+          <>
+            <ThinkingOrb state="listening" size={28} theme="light" ariaLabel="Narration playing" />
+            <span className="narration-floating-text">Pause</span>
+          </>
+        ) : (
+          <>
+            <Mic size={15} strokeWidth={2} aria-hidden="true" />
+            <span>Listen to story</span>
+          </>
+        )}
+>>>>>>> e74a871ce3aa1b07f4a9fd5fc3d17e9b2d7e3e72
       </button>
       {speechError && <span className="narration-placeholder" role="status">{speechError}</span>}
     </div>
@@ -1547,7 +1610,11 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
         )}
 
         {/* Front Cover */}
+<<<<<<< HEAD
         {(!isOpen || spread === 0) && !isBackCover && (
+=======
+        {!isBackCover && !isOpen && (
+>>>>>>> e74a871ce3aa1b07f4a9fd5fc3d17e9b2d7e3e72
           <div
             ref={coverRef}
             className="cover"
@@ -1578,7 +1645,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
         {/* Navigation Arrows */}
         {showPrevButton && (
           <button
-            className="book-arrow book-arrow-previous"
+            className={`book-arrow book-arrow-previous${!isOpen ? ' cover-navigation' : ''}`}
             type="button"
             aria-label={!isOpen && isBackCover ? 'Reopen book' : spread === 0 ? 'Close book' : 'Previous page'}
             onClick={(e) => {
@@ -1587,12 +1654,13 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
             }}
             disabled={isFlipping}
           >
-            <span className="book-chevron" aria-hidden="true">‹</span>
+            <span className="book-arrow-icon" aria-hidden="true">‹</span>
+            <span className="book-arrow-text">{!isOpen && isBackCover ? 'RETURN' : 'BACK'}</span>
           </button>
         )}
         {showNextButton && (
           <button
-            className="book-arrow book-arrow-next"
+            className={`book-arrow book-arrow-next${!isOpen ? ' cover-navigation' : ''}`}
             type="button"
             aria-label={!isOpen ? 'Open book' : spread === maxSpread ? 'Close book' : 'Next page'}
             disabled={isFlipping || (!isOpen && isBackCover)}
@@ -1601,7 +1669,8 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
               goNext()
             }}
           >
-            <span className="book-chevron" aria-hidden="true">›</span>
+            <span className="book-arrow-text">{!isOpen ? 'OPEN BOOK' : 'NEXT'}</span>
+            <span className="book-arrow-icon" aria-hidden="true">›</span>
           </button>
         )}
       </section>

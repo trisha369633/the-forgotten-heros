@@ -143,10 +143,15 @@ export const chapters = Array.from({ length: 10 }, (_, index) => {
     audio: `/media/chapter-${id}/audio/narration.mp3`,
     media: {
       type: 'image',
+<<<<<<< HEAD
       src: `/media/chapter-${id}/images/chapter${number}.jpeg`,
       ...(chaptersWithVideo.has(number) ? {
         video: `/media/chapter-${id}/videos/chapter-${id}.mp4`,
       } : {}),
+=======
+      src: `/media/chapter-${id}/images/chapter-${id}.jpeg`,
+      video: `/media/chapter-${id}/videos/chapter-${id}.mp4`,
+>>>>>>> e74a871ce3aa1b07f4a9fd5fc3d17e9b2d7e3e72
     },
   }
 })
