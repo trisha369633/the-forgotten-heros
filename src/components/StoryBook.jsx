@@ -239,7 +239,7 @@ function ChapterMedia({ chapter, onOpenVideo }) {
   const [isVideo, setIsVideo] = useState(false)
   const [videoFailed, setVideoFailed] = useState(false)
   const videoAvailable = useMediaAvailable(chapter.media.video, supportsVideoContentType)
-  const usesVideoDialog = chapter.number >= 3 && chapter.number <= 8
+  const usesVideoDialog = chapter.number >= 2 && chapter.number <= 9
 
   const handleVideoError = () => {
     if (usesVideoDialog) return
