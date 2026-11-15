@@ -125,7 +125,25 @@ const storyDetails = [
   },
 ]
 
-const chaptersWithVideo = new Set([1])
+const voiceFiles = {
+  1: 'voice-01.mp4',
+  2: 'voice-02.mp4',
+  3: 'voice-03.mp4',
+  4: 'voice-04.mp4',
+  5: 'voice-05.mp4',
+  6: 'voice-06.mp4',
+  7: 'voice-07.mp4',
+  8: 'voice-08.mp4',
+  9: 'voice-09.m4a.mpeg',
+}
+
+const videoFiles = {
+  2: 'Mars in a Minute How Do Rovers Drive on Mars - NASA Jet Propulsion Laboratory (720p, h264).mp4',
+  4: 'The Hubble Space Telescope - One Minute History - One Minute History (720p, h264).mp4',
+  6: 'Viking Lander animation (1970s) [HD source] - Retro Space HD (720p, h264).mp4',
+  7: 'OTD in Space – May 20 NASA Launches Pioneer Venus 1 - VideoFromSpace (720p, h264).mp4',
+  8: 'Anatomy of the Lunar Module - ABC News (480p, h264).mp4',
+}
 
 export const chapters = Array.from({ length: 10 }, (_, index) => {
   const number = index + 1
@@ -140,18 +158,15 @@ export const chapters = Array.from({ length: 10 }, (_, index) => {
     kind: isPuzzleChapter ? 'puzzle' : 'story',
     Content: isPuzzleChapter ? Chapter10 : (storyChapters[index] || Chapter10),
     ...(details || {}),
-    audio: `/media/chapter-${id}/audio/narration.mp3`,
+    audio: voiceFiles[number]
+      ? encodeURI(`/media/chapter-${id}/voice/${voiceFiles[number]}`)
+      : null,
     media: {
       type: 'image',
-<<<<<<< HEAD
-      src: `/media/chapter-${id}/images/chapter${number}.jpeg`,
-      ...(chaptersWithVideo.has(number) ? {
-        video: `/media/chapter-${id}/videos/chapter-${id}.mp4`,
-      } : {}),
-=======
-      src: `/media/chapter-${id}/images/chapter-${id}.jpeg`,
-      video: `/media/chapter-${id}/videos/chapter-${id}.mp4`,
->>>>>>> e74a871ce3aa1b07f4a9fd5fc3d17e9b2d7e3e72
+      src: encodeURI(`/media/chapter-${id}/images/chapter-${id}.jpeg`),
+      video: videoFiles[number]
+        ? encodeURI(`/media/chapter-${id}/videos/${videoFiles[number]}`)
+        : null,
     },
   }
 })

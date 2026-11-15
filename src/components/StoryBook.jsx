@@ -1,11 +1,6 @@
-<<<<<<< HEAD
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Mic, Move } from 'lucide-react'
 import { createPortal } from 'react-dom'
-=======
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Mic, Move, Play } from 'lucide-react'
->>>>>>> e74a871ce3aa1b07f4a9fd5fc3d17e9b2d7e3e72
 import { useNavigate } from 'react-router-dom'
 import gsap from 'gsap'
 import VideoPlayer from './VideoPlayer.jsx'
@@ -15,6 +10,17 @@ import './StoryBook.css'
 
 const QUIZ_QUESTIONS_PER_PAGE = 3
 const QUIZ_PAGES = 2
+const mediaAvailabilityCache = new Map()
+const narrationStopHandlers = new Set()
+const supportsVoiceContentType = (contentType) => (
+  contentType.startsWith('audio/') || contentType === 'video/mp4'
+)
+const supportsVideoContentType = (contentType) => contentType.startsWith('video/')
+
+function stopActiveNarrations() {
+  narrationStopHandlers.forEach((stop) => stop())
+}
+
 const displayedQuizQuestions = questions.slice(0, QUIZ_QUESTIONS_PER_PAGE * QUIZ_PAGES)
 const quizPages = Array.from({ length: QUIZ_PAGES }, (_, pageIndex) => {
   const questionStart = pageIndex * QUIZ_QUESTIONS_PER_PAGE
@@ -147,96 +153,59 @@ function BackgroundMusic({ isModalOpen }) {
   )
 }
 
-<<<<<<< HEAD
-const resolvedImageCache = new Map()
-const videoAvailabilityCache = new Map()
-
-function useVideoAvailable(src) {
+function useMediaAvailable(src, supportsContentType) {
   const [result, setResult] = useState(null)
 
   useEffect(() => {
     let active = true
 
-    if (!src || videoAvailabilityCache.has(src)) return () => {
+    if (!src || mediaAvailabilityCache.has(src)) return () => {
       active = false
     }
 
     fetch(src, { method: 'HEAD' })
       .then((response) => {
         const contentType = response.headers.get('content-type')?.toLowerCase() || ''
-        const available = response.ok && contentType.startsWith('video/')
-        videoAvailabilityCache.set(src, available)
+        const available = response.ok && supportsContentType(contentType)
+        mediaAvailabilityCache.set(src, available)
         if (active) setResult({ src, available })
       })
       .catch(() => {
-        videoAvailabilityCache.set(src, false)
+        mediaAvailabilityCache.set(src, false)
         if (active) setResult({ src, available: false })
       })
 
     return () => {
       active = false
     }
-  }, [src])
+  }, [src, supportsContentType])
 
   if (!src) return false
-  if (videoAvailabilityCache.has(src)) return videoAvailabilityCache.get(src)
+  if (mediaAvailabilityCache.has(src)) return mediaAvailabilityCache.get(src)
   return result?.src === src && result.available
 }
 
 function ChapterMedia({ chapter, onOpenVideo }) {
-  const candidates = [
-    `/media/chapter-${chapter.id}/images/chapter${chapter.number}.jpeg`,
-    `/media/chapter-${chapter.id}/images/chapter-${chapter.id}.jpeg`,
-    `/media/chapter-${chapter.id}/images/chapter-${chapter.id}.jpg`,
-    `/media/chapter-01/images/chapter${chapter.number}.jpeg`,
-    chapter.media.src,
-  ]
-
-  const cachedSrc = resolvedImageCache.get(chapter.id)
-  const [currentSrc, setCurrentSrc] = useState(cachedSrc || candidates[0])
-  const [candidateIndex, setCandidateIndex] = useState(0)
-=======
-function ChapterMedia({ chapter }) {
-  const isVideo = chapter.media.type === 'video'
->>>>>>> e74a871ce3aa1b07f4a9fd5fc3d17e9b2d7e3e72
   const [imageUnavailable, setImageUnavailable] = useState(false)
   const [isVideo, setIsVideo] = useState(false)
   const [videoFailed, setVideoFailed] = useState(false)
-  const videoAvailable = useVideoAvailable(chapter.media.video)
-
-<<<<<<< HEAD
-  const handleImageLoad = (e) => {
-    resolvedImageCache.set(chapter.id, e.currentTarget.src)
-  }
-
-  const handleImageError = () => {
-    const nextIdx = candidateIndex + 1
-    if (nextIdx < candidates.length) {
-      setCandidateIndex(nextIdx)
-      setCurrentSrc(candidates[nextIdx])
-    } else {
-      setImageUnavailable(true)
-    }
-  }
-
+  const videoAvailable = useMediaAvailable(chapter.media.video, supportsVideoContentType)
   const usesVideoDialog = chapter.number >= 3 && chapter.number <= 8
 
   const handleVideoError = () => {
     if (usesVideoDialog) return
     setIsVideo(false)
     setVideoFailed(true)
-    if (chapter.media.video) videoAvailabilityCache.set(chapter.media.video, false)
+    if (chapter.media.video) mediaAvailabilityCache.set(chapter.media.video, false)
   }
 
-=======
->>>>>>> e74a871ce3aa1b07f4a9fd5fc3d17e9b2d7e3e72
   return (
     <div className="chapter-media-block">
       <div className="media-frame">
         {isVideo ? (
           <VideoPlayer
             src={chapter.media.video}
-            poster={currentSrc}
+            poster={chapter.media.src}
             title={`Chapter ${chapter.number} video`}
             onError={handleVideoError}
           />
@@ -276,7 +245,7 @@ function ChapterMedia({ chapter }) {
               onOpenVideo?.({
                 chapter,
                 src: chapter.media.video,
-                poster: currentSrc,
+                poster: chapter.media.src,
                 trigger: event.currentTarget,
                 onError: handleVideoError,
               })
@@ -287,7 +256,7 @@ function ChapterMedia({ chapter }) {
             </svg>
             <span>NASA's real video</span>
           </button>
-        ) : (
+        ) : chapter.number === 1 ? (
           <button
             className="watch-video-button book-type"
             type="button"
@@ -304,7 +273,7 @@ function ChapterMedia({ chapter }) {
             )}
             <span>{isVideo ? 'Show image' : 'Watch video'}</span>
           </button>
-        )
+        ) : null
       )}
     </div>
   )
@@ -410,155 +379,79 @@ function VideoModal({ video, onClose, reduceMotion }) {
 
 function ChapterNarration({ chapter }) {
   const audioRef = useRef(null)
-  const utteranceRef = useRef(null)
-  const [playbackMode, setPlaybackMode] = useState(null)
-  const [isPaused, setIsPaused] = useState(false)
-  const [speechError, setSpeechError] = useState('')
-  const [audioAvailable, setAudioAvailable] = useState(Boolean(chapter.audio))
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [audioFailed, setAudioFailed] = useState(false)
+  const audioAvailable = useMediaAvailable(chapter.audio, supportsVoiceContentType)
+  const canListen = Boolean(chapter.audio) && audioAvailable && !audioFailed
 
-  const speechIsAvailable =
-    typeof window !== 'undefined' &&
-    'speechSynthesis' in window &&
-    typeof window.SpeechSynthesisUtterance === 'function'
-
-  const storyText = chapter.paragraphs?.join(' ') || ''
-  const canListen = (storyText.length > 0 || audioAvailable) && (audioAvailable || speechIsAvailable)
-
-  function startSpeech() {
-    if (!storyText || !speechIsAvailable) return
-
-    const utterance = new window.SpeechSynthesisUtterance(storyText)
-    utterance.lang = 'en-US'
-    utterance.rate = 0.92
-    utterance.onend = () => {
-      utteranceRef.current = null
-      setPlaybackMode(null)
-      setIsPaused(false)
-    }
-    utterance.onerror = (event) => {
-      utteranceRef.current = null
-      if (event.error === 'canceled' || event.error === 'interrupted') return
-      setSpeechError('Speech narration could not be played.')
-      setPlaybackMode(null)
-      setIsPaused(false)
-    }
-    window.speechSynthesis.cancel()
-    utteranceRef.current = utterance
-    window.speechSynthesis.speak(utterance)
-    setPlaybackMode('speech')
-    setIsPaused(false)
-  }
-
-  const stopAll = useCallback(() => {
+  const stop = useCallback((updateState = true) => {
     if (audioRef.current) {
       audioRef.current.pause()
+      audioRef.current.currentTime = 0
     }
-    if (speechIsAvailable) {
-      window.speechSynthesis.cancel()
-    }
-    utteranceRef.current = null
-    setPlaybackMode(null)
-    setIsPaused(false)
-  }, [speechIsAvailable])
+    if (updateState) setIsPlaying(false)
+  }, [])
 
   useEffect(() => {
+    narrationStopHandlers.add(stop)
     return () => {
-      stopAll()
+      narrationStopHandlers.delete(stop)
+      stop(false)
     }
-  }, [chapter.id, stopAll])
+  }, [stop])
 
   async function togglePlayback(e) {
     e.stopPropagation()
-    if (playbackMode) {
-      if (isPaused) {
-        if (playbackMode === 'audio' && audioRef.current) {
-          try {
-            await audioRef.current.play()
-          } catch {
-            setSpeechError('Narration could not be resumed.')
-            setPlaybackMode(null)
-            setIsPaused(false)
-            return
-          }
-        } else if (speechIsAvailable) {
-          window.speechSynthesis.resume()
-        }
-        setIsPaused(false)
-      } else {
-        if (playbackMode === 'audio' && audioRef.current) {
-          audioRef.current.pause()
-        } else if (speechIsAvailable) {
-          window.speechSynthesis.pause()
-        }
-        setIsPaused(true)
-      }
+    if (isPlaying) {
+      stop()
       return
     }
 
-    setSpeechError('')
-    setIsPaused(false)
-    if (audioAvailable && audioRef.current) {
-      try {
-        await audioRef.current.play()
-        setPlaybackMode('audio')
-        return
-      } catch {
-        audioRef.current.pause()
-        setAudioAvailable(false)
-      }
+    const audio = audioRef.current
+    if (!audio || !audioAvailable || audioFailed) return
+
+    try {
+      audio.currentTime = 0
+      const playback = audio.play()
+      setIsPlaying(true)
+      await playback
+    } catch {
+      audio.pause()
+      audio.currentTime = 0
+      mediaAvailabilityCache.set(chapter.audio, false)
+      setAudioFailed(true)
+      setIsPlaying(false)
     }
-    startSpeech()
   }
 
   if (!canListen) return null
 
   return (
     <div className="chapter-narration" onClick={(e) => e.stopPropagation()}>
-      {chapter.audio && (
-        <audio
-          ref={audioRef}
-          className="narration-audio"
-          src={chapter.audio}
-          preload="none"
-          onError={() => setAudioAvailable(false)}
-          onEnded={() => {
-            setPlaybackMode(null)
-            setIsPaused(false)
-          }}
-          aria-hidden="true"
-          tabIndex={-1}
-        />
-      )}
+      <audio
+        ref={audioRef}
+        className="narration-audio"
+        src={chapter.audio}
+        preload="none"
+        onError={() => {
+          mediaAvailabilityCache.set(chapter.audio, false)
+          setAudioFailed(true)
+          setIsPlaying(false)
+        }}
+        onEnded={() => setIsPlaying(false)}
+        aria-hidden="true"
+        tabIndex={-1}
+      />
       <button
-        className={`speech-toggle${playbackMode && !isPaused ? ' playing floating' : isPaused ? ' paused' : ''}`}
+        className={`speech-toggle${isPlaying ? ' playing' : ''}`}
         type="button"
-        aria-pressed={Boolean(playbackMode)}
+        aria-pressed={isPlaying}
         onClick={togglePlayback}
-        title={isPaused ? 'Click to resume' : playbackMode ? 'Click to pause' : 'Listen to story'}
+        title={isPlaying ? 'Stop listening' : 'Listen to the story'}
       >
-<<<<<<< HEAD
         <Mic size={15} strokeWidth={2} aria-hidden="true" />
-        <span>{playbackMode ? 'Stop listening' : 'Listen to the story'}</span>
-=======
-        {isPaused ? (
-          <>
-            <Play size={15} strokeWidth={2} aria-hidden="true" />
-            <span>Resume</span>
-          </>
-        ) : playbackMode ? (
-          <>
-            <ThinkingOrb state="listening" size={28} theme="light" ariaLabel="Narration playing" />
-            <span className="narration-floating-text">Pause</span>
-          </>
-        ) : (
-          <>
-            <Mic size={15} strokeWidth={2} aria-hidden="true" />
-            <span>Listen to story</span>
-          </>
-        )}
->>>>>>> e74a871ce3aa1b07f4a9fd5fc3d17e9b2d7e3e72
+        <span>{isPlaying ? 'Stop listening' : 'Listen to the story'}</span>
       </button>
-      {speechError && <span className="narration-placeholder" role="status">{speechError}</span>}
     </div>
   )
 }
@@ -662,7 +555,7 @@ function BackCover({ onReopen }) {
   return (
     <div
       className="back-cover"
-      role="img"
+      role="group"
       aria-label="Back cover of The Forgotten Heroes"
     >
       <div className="back-cover-spine-edge" aria-hidden="true" />
@@ -706,7 +599,7 @@ function BackCover({ onReopen }) {
         <p className="back-cover-subtitle">Inspired by NASA’s open space data</p>
       </div>
       <button
-        className="book-arrow back-cover-reopen"
+        className="book-arrow book-arrow-previous cover-navigation back-cover-reopen"
         type="button"
         aria-label="Reopen book"
         onClick={(event) => {
@@ -714,13 +607,14 @@ function BackCover({ onReopen }) {
           onReopen?.()
         }}
       >
-        <span className="book-chevron" aria-hidden="true">‹</span>
+        <span className="book-arrow-icon" aria-hidden="true">‹</span>
+        <span className="book-arrow-text">RETURN</span>
       </button>
     </div>
   )
 }
 
-function PageLeft({ spreadIndex, quizAnswers, onQuizAnswer, isVideoModalOpen = false }) {
+function PageLeft({ spreadIndex, quizAnswers, onQuizAnswer }) {
   const spread = bookSpreads[spreadIndex]
 
   if (spreadIndex === 0) {
@@ -799,7 +693,7 @@ function PageLeft({ spreadIndex, quizAnswers, onQuizAnswer, isVideoModalOpen = f
         </div>
         {chapter.kind === 'story' && (
           <ChapterNarration
-            key={`${chapter.id}-${isVideoModalOpen}`}
+            key={`${chapter.id}-${spreadIndex}`}
             chapter={chapter}
           />
         )}
@@ -951,6 +845,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
   const leafLightingBackRef = useRef(null)
 
   const openVideo = useCallback((video) => {
+    stopActiveNarrations()
     setActiveVideo({ ...video, spreadIndex: spread })
   }, [spread])
   const closeVideo = useCallback(() => setActiveVideo(null), [])
@@ -997,13 +892,10 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
   // Open the book from closed cover
   const openBook = useCallback((targetSpread = 0) => {
     if (isFlippingRef.current) return
+    stopActiveNarrations()
     setActiveVideo(null)
     isFlippingRef.current = true
     setIsFlipping(true)
-
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-    }
 
     const tl = gsap.timeline({
       onComplete: () => {
@@ -1037,14 +929,11 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
   // Close the book back to cover
   const closeBook = useCallback(() => {
     if (isFlippingRef.current) return
+    stopActiveNarrations()
     setActiveVideo(null)
     isFlippingRef.current = true
     setIsFlipping(true)
     setIsBackCover(false)
-
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-    }
 
     const tl = gsap.timeline({
       onComplete: () => {
@@ -1074,13 +963,10 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
   // Close the book forward to the back cover
   const closeToBackCover = useCallback(() => {
     if (isFlippingRef.current) return
+    stopActiveNarrations()
     setActiveVideo(null)
     isFlippingRef.current = true
     setIsFlipping(true)
-
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-    }
 
     setFlipState({
       direction: 'close-back',
@@ -1092,13 +978,10 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
   // Reopen the book from the back cover
   const openFromBackCover = useCallback((targetSpread = lastSpreadIndex) => {
     if (isFlippingRef.current) return
+    stopActiveNarrations()
     setActiveVideo(null)
     isFlippingRef.current = true
     setIsFlipping(true)
-
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-    }
 
     setIsOpen(true)
     setIsBackCover(false)
@@ -1113,6 +996,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
   // Turn page forward or backward with 3D leaf flip
   const turnToSpread = useCallback((targetSpread) => {
     if (isFlippingRef.current || targetSpread === spread) return
+    stopActiveNarrations()
     setActiveVideo(null)
     const direction = targetSpread > spread ? 'next' : 'prev'
 
@@ -1131,10 +1015,6 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
     const rightShadow = rightShadowRef.current
     const frontLighting = leafLightingFrontRef.current
     const backLighting = leafLightingBackRef.current
-
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-    }
 
     if (direction === 'close-back') {
       gsap.set(leaf, { transformOrigin: 'left center', rotationY: 0 })
@@ -1160,7 +1040,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
       }, 0)
 
       tl.to(bookRef.current, {
-        xPercent: isMobileLayout ? 0 : 25,
+        xPercent: isMobileLayout ? 0 : -25,
         duration: 0.85,
         ease: 'power2.inOut',
       }, 0)
@@ -1190,7 +1070,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
     if (direction === 'open-back') {
       gsap.set(leaf, { transformOrigin: 'left center', rotationY: -180 })
       const isMobileLayout = window.matchMedia('(max-width: 768px)').matches
-      gsap.set(bookRef.current, { xPercent: isMobileLayout ? 0 : 25 })
+      gsap.set(bookRef.current, { xPercent: isMobileLayout ? 0 : -25 })
       if (frontLighting) gsap.set(frontLighting, { opacity: 0.45 })
       if (backLighting) gsap.set(backLighting, { opacity: 0 })
 
@@ -1481,7 +1361,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
     }
   }, [activeVideo, closeToBackCover, closeVideo, goNext, goPrevious, isBackCover, isOpen, maxSpread, openBook, openFromBackCover, spread])
 
-  const showPrevButton = isOpen || (!isOpen && isBackCover)
+  const showPrevButton = isOpen
   const showNextButton = isOpen || (!isOpen && !isBackCover)
 
   return (
@@ -1533,7 +1413,6 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
               }
               quizAnswers={quizAnswers}
               onQuizAnswer={handleQuizAnswer}
-              isVideoModalOpen={Boolean(activeVideo)}
             />
             <div ref={leftShadowRef} className="page-shadow-overlay shadow-left" aria-hidden="true" />
           </div>
@@ -1610,11 +1489,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
         )}
 
         {/* Front Cover */}
-<<<<<<< HEAD
         {(!isOpen || spread === 0) && !isBackCover && (
-=======
-        {!isBackCover && !isOpen && (
->>>>>>> e74a871ce3aa1b07f4a9fd5fc3d17e9b2d7e3e72
           <div
             ref={coverRef}
             className="cover"
@@ -1652,7 +1527,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
               e.stopPropagation()
               goPrevious()
             }}
-            disabled={isFlipping}
+            disabled={isFlipping || Boolean(activeVideo)}
           >
             <span className="book-arrow-icon" aria-hidden="true">‹</span>
             <span className="book-arrow-text">{!isOpen && isBackCover ? 'RETURN' : 'BACK'}</span>
@@ -1663,7 +1538,7 @@ function StoryBook({ chapter, startClosed = false, reduceMotion, onReduceMotionC
             className={`book-arrow book-arrow-next${!isOpen ? ' cover-navigation' : ''}`}
             type="button"
             aria-label={!isOpen ? 'Open book' : spread === maxSpread ? 'Close book' : 'Next page'}
-            disabled={isFlipping || (!isOpen && isBackCover)}
+            disabled={isFlipping || Boolean(activeVideo) || (!isOpen && isBackCover)}
             onClick={(e) => {
               e.stopPropagation()
               goNext()
