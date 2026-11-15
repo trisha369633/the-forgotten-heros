@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Mic, Move } from 'lucide-react'
+import { Mic, Move, Volume2, VolumeX } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import gsap from 'gsap'
@@ -10,12 +10,34 @@ import './StoryBook.css'
 
 const QUIZ_QUESTIONS_PER_PAGE = 3
 const QUIZ_PAGES = 2
+const BACKGROUND_MUSIC_VOLUME = 0.3
+const DUCKED_BACKGROUND_MUSIC_VOLUME = 0.2
 const mediaAvailabilityCache = new Map()
 const narrationStopHandlers = new Set()
+const activeNarrations = new Set()
 const supportsVoiceContentType = (contentType) => (
   contentType.startsWith('audio/') || contentType === 'video/mp4'
 )
 const supportsVideoContentType = (contentType) => contentType.startsWith('video/')
+
+function updateBackgroundMusicVolume() {
+  const audio = document.getElementById('background-music')
+  if (audio) {
+    audio.volume = activeNarrations.size
+      ? DUCKED_BACKGROUND_MUSIC_VOLUME
+      : BACKGROUND_MUSIC_VOLUME
+  }
+}
+
+function setNarrationActive(audio, isActive) {
+  if (!audio) return
+  if (isActive) {
+    activeNarrations.add(audio)
+  } else {
+    activeNarrations.delete(audio)
+  }
+  updateBackgroundMusicVolume()
+}
 
 function stopActiveNarrations() {
   narrationStopHandlers.forEach((stop) => stop())
@@ -48,30 +70,40 @@ const lastSpreadIndex = bookSpreads.length - 1
 const firstSpreadForChapter = (chapterNumber) => chapterFirstSpreads.get(chapterNumber) ?? 0
 const chapterNumberForSpread = (spreadIndex) => bookSpreads[spreadIndex]?.chapter?.number ?? 1
 
-function MicrophoneIcon({ muted }) {
-  return (
-    <svg
-      className="sound-icon"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.85"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="9" y="2.5" width="6" height="12" rx="3" />
-      <path d="M5.5 10.5v1.5a6.5 6.5 0 0 0 13 0v-1.5M12 18.5V22M8.5 22h7" />
-      {muted && <path d="m4 4 16 16" />}
-    </svg>
-  )
-}
-
 function BackgroundMusic({ isModalOpen }) {
   const [enabled, setEnabled] = useState(false)
   const [message, setMessage] = useState('')
   const modalWasOpenRef = useRef(false)
   const wasPlayingBeforeModalRef = useRef(false)
+  const playbackAttemptRef = useRef(0)
+
+  useEffect(() => {
+    const audio = document.getElementById('background-music')
+    if (!audio) return
+
+    const attempt = ++playbackAttemptRef.current
+    updateBackgroundMusicVolume()
+    audio.play()
+      .then(() => {
+        if (attempt !== playbackAttemptRef.current) return
+        setEnabled(true)
+        setMessage('')
+      })
+      .catch((error) => {
+        if (attempt !== playbackAttemptRef.current) return
+        setEnabled(false)
+        setMessage(
+          error?.name === 'NotAllowedError'
+            ? 'Autoplay was blocked. Click to start background sound.'
+            : 'Background sound could not be played.',
+        )
+      })
+
+    return () => {
+      playbackAttemptRef.current += 1
+      audio.pause()
+    }
+  }, [])
 
   useEffect(() => {
     const audio = document.getElementById('background-music')
@@ -79,6 +111,7 @@ function BackgroundMusic({ isModalOpen }) {
     if (isModalOpen && !modalWasOpenRef.current) {
       modalWasOpenRef.current = true
       wasPlayingBeforeModalRef.current = enabled
+      playbackAttemptRef.current += 1
       if (enabled && audio) {
         audio.pause()
       }
@@ -92,14 +125,22 @@ function BackgroundMusic({ isModalOpen }) {
       wasPlayingBeforeModalRef.current = false
       if (!audio) return
 
+      const attempt = ++playbackAttemptRef.current
+      updateBackgroundMusicVolume()
       audio.play()
         .then(() => {
+          if (attempt !== playbackAttemptRef.current) return
           setEnabled(true)
           setMessage('')
         })
-        .catch(() => {
+        .catch((error) => {
+          if (attempt !== playbackAttemptRef.current) return
           setEnabled(false)
-          setMessage('Background music is not available yet')
+          setMessage(
+            error?.name === 'NotAllowedError'
+              ? 'Click to resume background sound.'
+              : 'Background sound could not be played.',
+          )
         })
     }
   }, [enabled, isModalOpen])
@@ -109,19 +150,28 @@ function BackgroundMusic({ isModalOpen }) {
     if (!audio) return
 
     if (enabled) {
+      playbackAttemptRef.current += 1
       audio.pause()
       setEnabled(false)
       setMessage('')
       return
     }
 
+    const attempt = ++playbackAttemptRef.current
     try {
+      updateBackgroundMusicVolume()
       await audio.play()
+      if (attempt !== playbackAttemptRef.current) return
       setEnabled(true)
       setMessage('')
-    } catch {
+    } catch (error) {
+      if (attempt !== playbackAttemptRef.current) return
       setEnabled(false)
-      setMessage('Background music is not available yet')
+      setMessage(
+        error?.name === 'NotAllowedError'
+          ? 'Click to allow background sound.'
+          : 'Background sound could not be played.',
+      )
     }
   }
 
@@ -129,14 +179,12 @@ function BackgroundMusic({ isModalOpen }) {
     <div className="sound-control">
       <audio
         id="background-music"
-        src="/media/background-music.mp3"
+        src="/backgrounds/backgroundsound.wav"
         loop
         preload="none"
         onError={() => {
-          if (enabled) {
-            setEnabled(false)
-            setMessage('Background music is not available yet')
-          }
+          setEnabled(false)
+          setMessage('Background sound could not be loaded.')
         }}
       />
       <button
@@ -144,10 +192,11 @@ function BackgroundMusic({ isModalOpen }) {
         type="button"
         onClick={toggleMusic}
         aria-pressed={enabled}
-        aria-label={enabled ? 'Turn sound off' : 'Turn sound on'}
-        title={message || (enabled ? 'Turn sound off' : 'Turn sound on')}
+        aria-label={enabled ? 'Mute background sound' : 'Play background sound'}
+        title={message || (enabled ? 'Mute background sound' : 'Play background sound')}
       >
-        <MicrophoneIcon muted={!enabled} />
+        {enabled ? <Volume2 size={18} aria-hidden="true" /> : <VolumeX size={18} aria-hidden="true" />}
+        <span>Background sound</span>
       </button>
     </div>
   )
@@ -386,6 +435,7 @@ function ChapterNarration({ chapter }) {
 
   const stop = useCallback((updateState = true) => {
     if (audioRef.current) {
+      setNarrationActive(audioRef.current, false)
       audioRef.current.pause()
       audioRef.current.currentTime = 0
     }
@@ -413,9 +463,11 @@ function ChapterNarration({ chapter }) {
     try {
       audio.currentTime = 0
       const playback = audio.play()
+      setNarrationActive(audio, true)
       setIsPlaying(true)
       await playback
     } catch {
+      setNarrationActive(audio, false)
       audio.pause()
       audio.currentTime = 0
       mediaAvailabilityCache.set(chapter.audio, false)
@@ -434,11 +486,15 @@ function ChapterNarration({ chapter }) {
         src={chapter.audio}
         preload="none"
         onError={() => {
+          setNarrationActive(audioRef.current, false)
           mediaAvailabilityCache.set(chapter.audio, false)
           setAudioFailed(true)
           setIsPlaying(false)
         }}
-        onEnded={() => setIsPlaying(false)}
+        onEnded={() => {
+          setNarrationActive(audioRef.current, false)
+          setIsPlaying(false)
+        }}
         aria-hidden="true"
         tabIndex={-1}
       />

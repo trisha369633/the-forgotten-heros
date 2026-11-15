@@ -17,7 +17,7 @@ Place the permanent space background at `public/backgrounds/space-background.jpg
 - `public/media/chapter-01/audio/narration.mp3`
 - `public/media/chapter-01/videos/chapter-01.mp4`
 
-Use the corresponding `chapter-02` through `chapter-10` folders. Background music is read from `public/media/background-music.mp3` and starts only after the sound toggle is activated. Missing media is reported in the book UI.
+Use the corresponding `chapter-02` through `chapter-10` folders. Background music is read from `public/backgrounds/backgroundsound.wav` and attempts to start automatically. If the browser blocks audio autoplay, use the labeled Background sound button to start it; the button mutes playback once it is on. The music loops, plays at 30% volume, and lowers to 20% while chapter narration is playing. Missing media is reported in the book UI.
 
 ## Checks
 
